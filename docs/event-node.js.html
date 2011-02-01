@@ -1,0 +1,220 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns:yui="http://yuilibrary.com/rdf/1.0/yui.rdf#">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+	<title>API: eventx-core   event-node.js  (YUI Library)</title>
+
+	<link rel="stylesheet" type="text/css" href="assets/reset-fonts-grids-min.css" />
+	<link rel="stylesheet" type="text/css" href="assets/api.css" />
+
+    <script type="text/javascript" src="assets/api-js"></script>
+    <script type="text/javascript" src="assets/ac-js"></script>
+</head>
+
+<body id="yahoo-com">
+
+<div id="doc3" class="yui-t2">
+	<div id="hd">
+        <h1><a href="http://developer.yahoo.com/yui/" title="Yahoo! UI Library">Yahoo! UI Library</a></h1>
+        <h3>eventx-core&nbsp; <span class="subtitle">3</span></h3>
+        <a href="./index.html" title="Yahoo! UI Library">Yahoo! UI Library</a> 
+            &gt; <a href="./module_eventx-core.html" title="eventx-core">eventx-core</a>
+                
+                 &gt; event-node.js (source view) 
+        <form onsubmit="return false">
+            <div id="propertysearch">
+                Search: <input autocomplete="off" id="searchinput" />
+                <div id="searchresults">
+                    &nbsp;
+                </div>
+            </div>
+        </form>
+	</div>
+
+	<div id="bd">
+		<div id="yui-main">
+			<div class="yui-b">
+            <form action="#" name="yui-classopts-form" method="get" id="yui-classopts-form">
+                <fieldset>
+                    <legend>Filters</legend>
+                <span class="classopts"><input type="checkbox" name="show_private" id="show_private" /> <label for="show_private">Show Private</label></span>
+                <span class="classopts"><input type="checkbox" name="show_protected" id="show_protected" /> <label for="show_protected">Show Protected</label></span>
+                <span class="classopts"><input type="checkbox" name="show_deprecated" id="show_deprecated" /> <label for="show_deprecated">Show Deprecated</label></span>
+                </fieldset>
+            </form>
+
+                    <div id="srcout">
+                        <style>
+                            #doc3 .classopts { display:none; }
+                        </style>
+                        <div class="highlight"><pre><span class="nx">YUI</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;eventx-node&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">Y</span><span class="p">)</span> <span class="p">{</span>
+
+<span class="kd">var</span> <span class="nx">win</span> <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nx">config</span><span class="p">.</span><span class="nx">win</span><span class="p">,</span>
+    <span class="nx">doc</span> <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nx">config</span><span class="p">.</span><span class="nx">doc</span><span class="p">,</span>
+
+    <span class="nx">YObject</span>   <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nb">Object</span><span class="p">,</span>
+    <span class="nx">proto</span>     <span class="o">=</span> <span class="nx">YObject</span><span class="p">,</span>
+    <span class="nx">YEvent</span>    <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nx">EventX</span><span class="p">,</span>
+    <span class="nx">YEventAPI</span> <span class="o">=</span> <span class="nx">YEvent</span><span class="p">.</span><span class="nx">API</span><span class="p">,</span>
+    <span class="nx">YEventDOM</span> <span class="o">=</span> <span class="nx">YEvent</span><span class="p">.</span><span class="nx">DOM</span><span class="p">,</span>
+
+    <span class="nx">wkKeyMap</span>  <span class="o">=</span> <span class="p">{</span>
+        <span class="mi">63232</span><span class="o">:</span> <span class="mi">38</span><span class="p">,</span> <span class="c1">// up</span>
+        <span class="mi">63233</span><span class="o">:</span> <span class="mi">40</span><span class="p">,</span> <span class="c1">// down</span>
+        <span class="mi">63234</span><span class="o">:</span> <span class="mi">37</span><span class="p">,</span> <span class="c1">// left</span>
+        <span class="mi">63235</span><span class="o">:</span> <span class="mi">39</span><span class="p">,</span> <span class="c1">// right</span>
+        <span class="mi">63276</span><span class="o">:</span> <span class="mi">33</span><span class="p">,</span> <span class="c1">// page up</span>
+        <span class="mi">63277</span><span class="o">:</span> <span class="mi">34</span><span class="p">,</span> <span class="c1">// page down</span>
+        <span class="mi">25</span><span class="o">:</span>     <span class="mi">9</span><span class="p">,</span> <span class="c1">// SHIFT-TAB (Safari provides a different key code in</span>
+                   <span class="c1">// this case, even though the shiftKey modifier is set)</span>
+        <span class="mi">63272</span><span class="o">:</span> <span class="mi">46</span><span class="p">,</span> <span class="c1">// delete</span>
+        <span class="mi">63273</span><span class="o">:</span> <span class="mi">36</span><span class="p">,</span> <span class="c1">// home</span>
+        <span class="mi">63275</span><span class="o">:</span> <span class="mi">35</span>  <span class="c1">// end</span>
+
+    <span class="p">},</span>
+
+    <span class="nx">defaultEvent</span> <span class="o">=</span> <span class="nx">proto</span><span class="p">(</span><span class="nx">YEventAPI</span><span class="p">.</span><span class="nx">defaultEvent</span><span class="p">,</span> <span class="p">{</span>
+        <span class="nx">init</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">sub</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">bindings</span> <span class="o">=</span> <span class="nx">host</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">binding</span> <span class="o">||</span> <span class="p">(</span><span class="nx">host</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">binding</span> <span class="o">=</span> <span class="p">{}),</span>
+                <span class="nx">type</span> <span class="o">=</span> <span class="nx">sub</span><span class="p">.</span><span class="nx">type</span><span class="p">;</span>
+
+            <span class="nx">bindings</span><span class="p">[</span><span class="nx">type</span><span class="p">]</span> <span class="o">=</span> <span class="nx">YEventDOM</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">host</span><span class="p">.</span><span class="nx">_node</span><span class="p">,</span> <span class="nx">type</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">host</span><span class="p">.</span><span class="nx">fire</span><span class="p">(</span><span class="nx">type</span><span class="p">,</span> <span class="nx">e</span><span class="p">);</span>
+            <span class="p">});</span>
+        <span class="p">},</span>
+
+        <span class="nx">destroy</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">bindings</span> <span class="o">=</span> <span class="nx">host</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">binding</span><span class="p">;</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="nx">bindings</span><span class="p">[</span><span class="nx">type</span><span class="p">])</span> <span class="p">{</span>
+                <span class="nx">YEventDOM</span><span class="p">.</span><span class="nx">detach</span><span class="p">(</span><span class="nx">host</span><span class="p">.</span><span class="nx">_node</span><span class="p">,</span> <span class="nx">type</span><span class="p">,</span> <span class="nx">bindings</span><span class="p">[</span><span class="nx">type</span><span class="p">]);</span>
+                <span class="k">delete</span> <span class="nx">bindings</span><span class="p">[</span><span class="nx">type</span><span class="p">];</span>
+            <span class="p">}</span>
+        <span class="p">},</span>
+
+        <span class="nx">ifStopped</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">YEventDOM</span><span class="p">.</span><span class="nx">stop</span><span class="p">(</span><span class="nx">e</span><span class="p">);</span>
+        <span class="p">},</span>
+
+        <span class="nx">ifPrevented</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">YEventDOM</span><span class="p">.</span><span class="nx">prevent</span><span class="p">(</span><span class="nx">e</span><span class="p">);</span>
+        <span class="p">},</span>
+
+        <span class="nx">generateEvent</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">type</span><span class="p">,</span> <span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="c1">// FIXME: this fails in FF 3.6- and Chrome 5.0.375.  Objects</span>
+            <span class="c1">// derived from event object will throw (FF) or ignore (Chrome)</span>
+            <span class="c1">// sets of event properties.</span>
+            <span class="cm">/*</span>
+<span class="cm">            var event = proto(e, YEventAPI._event);</span>
+<span class="cm">            event._event = e;</span>
+<span class="cm">            event.type = type;</span>
+<span class="cm">            event.target = this._getTarget(e.target);</span>
+
+<span class="cm">            return this._prepEvent ? this._prepEvent(event) : event;</span>
+<span class="cm">            */</span>
+            <span class="kd">var</span> <span class="nx">event</span> <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nx">mix</span><span class="p">({</span>
+                <span class="nx">type</span><span class="o">:</span> <span class="nx">type</span><span class="p">,</span>
+                <span class="nx">target</span><span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">_getTarget</span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">target</span><span class="p">),</span>
+                <span class="nx">_event</span><span class="o">:</span> <span class="nx">e</span><span class="p">,</span>
+                <span class="nx">currentTarget</span><span class="o">:</span> <span class="kc">null</span>
+            <span class="p">},</span> <span class="nx">YEventAPI</span><span class="p">.</span><span class="nx">_event</span><span class="p">);</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">_prepEvent</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">event</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_prepEvent</span><span class="p">(</span><span class="nx">event</span><span class="p">);</span>
+            <span class="p">}</span>
+
+            <span class="nx">event</span><span class="p">.</span><span class="nx">__proto__</span> <span class="o">=</span> <span class="nx">e</span><span class="p">;</span>
+
+            <span class="k">return</span> <span class="nx">event</span><span class="p">;</span>
+        <span class="p">},</span>
+
+        <span class="nx">_getTarget</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">target</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">while</span> <span class="p">(</span><span class="nx">target</span> <span class="o">&amp;&amp;</span> <span class="nx">target</span><span class="p">.</span><span class="nx">nodeType</span> <span class="o">===</span> <span class="mi">3</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">target</span> <span class="o">=</span> <span class="nx">target</span><span class="p">.</span><span class="nx">parentNode</span><span class="p">;</span>
+            <span class="p">}</span>
+
+            <span class="k">return</span> <span class="k">new</span> <span class="nx">Y</span><span class="p">.</span><span class="nx">Node</span><span class="p">(</span><span class="nx">target</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">});</span>
+
+<span class="c1">// TODO: Make it easier to do this in one step.  Lazy proto? isPrototypeOf?</span>
+<span class="nx">Y</span><span class="p">.</span><span class="nx">Node</span><span class="p">.</span><span class="nx">_events</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="nx">events</span><span class="o">:</span> <span class="p">{</span>
+        <span class="cm">/*</span>
+<span class="cm">        mouseover: // relatedTarget (any others?) and toElement, srcElement, etc</span>
+<span class="cm">        mouseout:</span>
+<span class="cm">        mousewheel: // fork DOMMouseScroll</span>
+<span class="cm">        */</span>
+    <span class="p">},</span>
+    <span class="nx">defaultEvent</span><span class="o">:</span> <span class="nx">defaultEvent</span>
+<span class="p">};</span>
+
+<span class="k">if</span> <span class="p">(</span><span class="nx">Y</span><span class="p">.</span><span class="nx">UA</span><span class="p">.</span><span class="nx">webkit</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// TODO: needed for keyup, keypress?</span>
+    <span class="nx">Y</span><span class="p">.</span><span class="nx">Node</span><span class="p">.</span><span class="nx">_events</span><span class="p">.</span><span class="nx">event</span><span class="p">.</span><span class="nx">keydown</span> <span class="o">=</span> <span class="nx">proto</span><span class="p">(</span><span class="nx">defaultEvent</span><span class="p">,</span> <span class="p">{</span>
+        <span class="nx">_prepEvent</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">keyCode</span> <span class="k">in</span> <span class="nx">wkKeyMap</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">e</span><span class="p">.</span><span class="nx">keyCode</span> <span class="o">=</span> <span class="nx">wkKeyMap</span><span class="p">[</span><span class="nx">e</span><span class="p">.</span><span class="nx">keyCode</span><span class="p">];</span>
+            <span class="p">}</span>
+
+            <span class="k">return</span> <span class="nx">e</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="nx">Y</span><span class="p">.</span><span class="nx">augment</span><span class="p">(</span><span class="nx">Y</span><span class="p">.</span><span class="nx">Node</span><span class="p">,</span> <span class="nx">YEventAPI</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+
+<span class="p">},</span> <span class="s1">&#39;0.0.1&#39;</span><span class="p">,</span> <span class="p">{</span> <span class="nx">requires</span><span class="o">:</span> <span class="p">[</span><span class="s1">&#39;eventx-core&#39;</span><span class="p">,</span> <span class="s1">&#39;eventx-dom&#39;</span><span class="p">]</span> <span class="p">});</span>
+</pre></div>
+
+                    </div>
+			</div>
+		</div>
+		<div class="yui-b">
+            <div class="nav">
+
+                    <div id="moduleList" class="module">
+                        <h4>Modules</h4>
+                        <ul class="content">
+                                <li class="selected"><a href="module_eventx-core.html" title="eventx-core">eventx-core</a></li>
+                        </ul>
+                    </div>
+
+                    <div id="classList" class="module">
+                        <h4>Classes</h4>
+                        <ul class="content">
+                                <li class=""><a href="Y.Event.API.html" title="Y.Event.API">Y.Event.API</a></li>
+                        </ul>
+                    </div>
+
+                    <div id="fileList" class="module">
+                        <h4>Files</h4>
+                        <ul class="content">        
+                                <li class=""><a href="event-dom-ie.js.html" title="event-dom-ie.js">event-dom-ie.js</a></li>
+                                <li class=""><a href="event-dom.js.html" title="event-dom.js">event-dom.js</a></li>
+                                <li class=""><a href="event-min.js.html" title="event-min.js">event-min.js</a></li>
+                                <li class=""><a href="event-node-domready.js.html" title="event-node-domready.js">event-node-domready.js</a></li>
+                                <li class=""><a href="event-node-focus.js.html" title="event-node-focus.js">event-node-focus.js</a></li>
+                                <li class="selected"><a href="event-node.js.html" title="event-node.js">event-node.js</a></li>
+                                <li class=""><a href="event.js.html" title="event.js">event.js</a></li>
+                        </ul>
+                    </div>
+
+
+
+
+
+            </div>
+		</div>
+	</div>
+	<div id="ft">
+        <hr />
+        Copyright &copy; 2010 Yahoo! Inc. All rights reserved.
+	</div>
+</div>
+<script type="text/javascript">
+
+    var ALL_YUI_PROPS = [{"url": "Y.Event.API.html#method_after", "access": "", "host": "Y.Event.API", "type": "method", "name": "after"}, {"url": "Y.Event.API.html#method_bubbleTo", "access": "", "host": "Y.Event.API", "type": "method", "name": "bubbleTo"}, {"url": "Y.Event.API.html#property_defaultEvent", "access": "", "host": "Y.Event.API", "type": "property", "name": "defaultEvent"}, {"url": "Y.Event.API.html#method_detach", "access": "", "host": "Y.Event.API", "type": "method", "name": "detach"}, {"url": "Y.Event.API.html#property__event", "access": "protected", "host": "Y.Event.API", "type": "property", "name": "_event"}, {"url": "Y.Event.API.html#property_eventDef.allowDups", "access": "protected", "host": "Y.Event.API", "type": "property", "name": "eventDef.allowDups"}, {"url": "Y.Event.API.html#method_eventDef.destroy", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.destroy"}, {"url": "Y.Event.API.html#method_eventDef.detach", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.detach"}, {"url": "Y.Event.API.html#method_eventDef.filterSubs", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.filterSubs"}, {"url": "Y.Event.API.html#method_eventDef.fire", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.fire"}, {"url": "Y.Event.API.html#method_eventDef.generateEvent", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.generateEvent"}, {"url": "Y.Event.API.html#method_eventDef._immediate", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef._immediate"}, {"url": "Y.Event.API.html#method_eventDef.init", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.init"}, {"url": "Y.Event.API.html#method_eventDef.notify", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.notify"}, {"url": "Y.Event.API.html#method_eventDef.subscribe", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.subscribe"}, {"url": "Y.Event.API.html#method_eventDef.test", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.test"}, {"url": "Y.Event.API.html#method_fire", "access": "", "host": "Y.Event.API", "type": "method", "name": "fire"}, {"url": "Y.Event.API.html#method_getEvent", "access": "", "host": "Y.Event.API", "type": "method", "name": "getEvent"}, {"url": "Y.Event.API.html#method_hasSubscribers", "access": "", "host": "Y.Event.API", "type": "method", "name": "hasSubscribers"}, {"url": "Y.Event.API.html#method__initEvents", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "_initEvents"}, {"url": "Y.Event.API.html#method_on", "access": "", "host": "Y.Event.API", "type": "method", "name": "on"}, {"url": "Y.Event.API.html#method_publish", "access": "", "host": "Y.Event.API", "type": "method", "name": "publish"}, {"url": "Y.Event.API.html#method__resolveBubblePath", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "_resolveBubblePath"}, {"url": "Y.Event.API.html#method__subscribe", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "_subscribe"}, {"url": "Y.Event.API.html#method_subscribe", "access": "", "host": "Y.Event.API", "type": "method", "name": "subscribe"}, {"url": "Y.Event.API.html#property_TYPE_PATTERN", "access": "protected", "host": "Y.Event.API", "type": "property", "name": "TYPE_PATTERN"}];
+</script>
+</body>
+</html>

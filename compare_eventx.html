@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+    <title>Test Page</title>
+    <style type="text/css">
+        #testbed { background: #900; color: #fff; height: 5em; }
+    </style>
+</head>
+<body class="yui3-skin-sam">
+<div>
+    <button id="attach">Attach</button>
+    <button id="detach">Detach</button>
+    <button id="fire">Fire (after testbed click)</button>
+</div>
+<div id="testbed"></div>
+<div id="report"></div>
+
+<script src="/dev/lsmith/yui3/build/yui/yui.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-dom.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-dom-ie.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-inverse-subscribe.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/node.js"></script>
+<script>
+YUI({
+    filter: 'raw'
+}).use('eventx-dom','eventx-dom-ie', 'node', function (Y) {
+
+var testbed = Y.one('#testbed'),
+    report  = Y.one('#report'),
+    iters   = 100,
+    divs, start, i, len, sub,
+    fire   = [];
+
+testbed.append(new Array(iters + 1).join('<div>') +
+              '<p>Click me</p>' +
+              new Array(iters + 1).join('</div>'));
+
+divs = Y.all('#testbed div');
+
+Y.one("#attach").on('click', function () {
+    start = new Date();
+    divs.on('click', function () {
+        fire.push(new Date());
+    });
+    report.append("<li>Attach: " + (new Date() - start) + "</li>");
+});
+
+Y.one("#detach").on('click', function () {
+    start = new Date();
+    divs.detach('click');
+    report.append("<li>Detach: " + (new Date() - start) + "</li>");
+});
+
+Y.one("#fire").on('click', function () {
+    report.append("<li>Fire (" + fire.length + "): " + (fire[fire.length - 1] - fire[0]) + "</li>");
+    fire = [];
+});
+
+});
+</script>
+</body>
+</html>

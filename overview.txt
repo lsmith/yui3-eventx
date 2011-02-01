@@ -1,0 +1,210 @@
+Observations:
+* DOM subs are custom event subs + initial DOM binding
+* synthetic subs are custom event sub + (typically) initial DOM binding(s)
+* common pattern of publishing events with defaultFn/configs in Base initializer
+* hard coded on and after phase and behavior phase (defaultFn, preventedFn, etc)
+* assumed signature on(type, callback, thisObj, args*)
+* EventTarget extensions include code for YUI instances
+* Y.on has special behavior
+* prefix is delegation filtering
+* event-base + event-custom + event-synthetic = 25k (min)
+* detach() is ignorant of on/after phase
+* many implementers/learners are confused that on(..) is not chainable
+* code is difficult to follow
+* publish() required to bubble
+* delegation is always in "on" phase
+* subscription/detach cannot be aborted
+* circular dependency between event and event-custom
+* core methods are very long
+
+
+Opportunities:
+1) simplify
+    - standardize on a single infrastructure and API for
+        custom event
+        DOM events
+        synthetic events
+    - should reduce file size
+    - may improve run time performance
+    - may help simplify messaging
+2) split out Y.on behavior from generic EventTarget behavior
+3) add init and destroy support for custom events (before first subscribe,
+    after last detach)
+    - useful for both synthetics and DOM events, and possibly customs as well
+4) allow for more flexible event behavior in all phases of the lifecycle
+    - customizable signature support
+    - customizable init, subscribe, fire, detach, and destroy logic
+5) unify delegation approach
+6) add support for static definition of events with defaultFn, etc
+7) add support for dynamic event types - e.g. input.on('key(shift+enter)', fn)
+8) move toward deprecating detach handle in favor of categories and chainable
+   on(..)
+
+
+Goals:
+* reduce the amount of code needed to extend or customize behavior
+* reduce the number of functions executed and limit function hops within each
+  lifecycle method
+* create as few objects as possible
+    - events are statically defined by default, but allow instance.publish(..)
+    - classes host a default event definition to handle 
+* do as little hard coded logic forking as possible
+    - prefer logic routing through extendable object hashes of functions
+* be as compatible with the current consumer contract as is reasonable/possible
+* reduce the core code footprint
+* provide a functional core with no browser normalization, then add this via submodul e in such a way that it doesn't (notably) impact the performance
+* add as few supporting methods as possible to public APIs
+
+
+Approach:
+1) start with the EventTarget API core methods on, after, detach, fire, publish
+2) remove state from events (subs, fired, etc), leaving just objects (not class
+   instances) with methods.  Properties are ok as long as they pertain to
+   behavior for all instances.
+3) add core methods (except publish) to the resulting objects (called "event
+   definitions" from here on)
+4) have the instance API methods get the event definition for the subscribed
+   event type, then defer to that event definition's method(s) to complete
+   the logic.
+5) move the responsibility for as much core logic as possible/reasonable to the
+   event definition methods.
+6) move event definitions into a static collection on the class
+7) define a default event definition to fulfill lifecycle method requirements
+   for unknown event types.  Other events on the object can then proto-wrap
+   (Y.Object) this default definition so they only need to define where the
+   event's behavior differs from the default.
+8) add support for init and destroy for all events at the API level
+9) add subscribe(phase, type, *) method to the API, where phase is something
+   like "before" or "after" - instance.on(type, fn) is equivalent to
+   instance.subscribe("before", type, fn)
+10) limit the API's understanding of method signatures to type and phase.  The
+    rest of the signature is processed by the event definition methods
+11) the events that pertain to a class and the default event definition are stored statically on the class.  E.g.
+MyClass._events = {
+    events: {
+        start: { /* overrides for "start" event */ },
+        ...
+    },
+    defaultEvent: { /* default definitions */ }
+}
+12) instantiation consists of setting up the instance's _evt property.  This object looks like this:
+this._evt = {
+    events: Y.Object(this.constructor._events.events),
+    defaultEvent: this.constructor._events.defaultEvent,
+    bubblePath: [this, /* entries from constructor's bubblePath */ ],
+    subs: {},
+    ... // other event state and reference maps
+}
+    
+The constructor's events object is proto-wrapped on the instance to facilitate instance based event publishing.
+
+
+Basic order of operations/logic flow:
+1) instance.on(type, fn) executes instance._subscribe(['before',type,fn])
+2) this method calls getEvent(type) to fetch the appropriate event definition
+   from the _evt.events collection, falling back to the default event.
+3) _subscribe then calls eventDef.init(..) if this is the first subscription*
+4) the return value from this indicates whether to abort or continue the
+   subscription
+5) If continue, eventDef.subscribe(..) is called, again returning an
+   abort/continue boolean*
+6) If continue, the subscription is registered
+
+* Each method receives as params the calling instance, the pending subscription
+* object, and any additional args passed to on/after/subscribe beyond the phase
+* and type (e.g. the callback function, thisObj, and extra args to pass the
+* subscribers on firing).
+
+
+DOM subscriptions:
+To facilitate DOM event subscriptions via the Node interface, Y.Node is given a
+static _events property containing a defaultEvent proto-wrapping
+Y.Event.API.defaultEvent, but with init and destroy methods that create and
+remove the DOM binding.  Also the default event's generateEvent method is
+overridden to create the event facade.
+
+Note: This is currently an incomplete solution because the default logic stores
+subscriptions on the instance, but NodeLists use a temp Node for iteration, and
+otherwise if onunload cleanup is needed the subs must be managed externally.
+
+
+Cross browser DOM event normilization strategy:
+Add event definition overrides to Y.Node._events.events collection for the
+specific event.  DOM event normilization occurs in the init method.  If, for
+example, browsers differ in event name, provide two entries, one of which
+includes an init that calls host.subscribe(..) for the other name, then returns
+false to abort the current subscription.  The init + abort technique can be
+used for other routing purposes as well (see Y.on below).
+
+
+Y.on:
+Y.on behavior overloading is accomplished by providing an init method on its
+default event definition.  In the init method, it evaluates the signature for
+compatibility with registered routes, and if it finds one, it defers to that
+subscription behavior, then returns false to abort the current subscription.
+Specific routes are added via submodule inclusion.  The order of operations is
+1) look for a registered/published event on Y ("domready", "available", etc)
+2) the default event is used, init is called
+3) init iterates the overrides map
+4) if an override is found, init defers to the override
+5) else, proceed with a default custom event subscription
+
+For example, Y.on('click',fn, '#foo') support is added by a submodule that
+requires Selector and the DOM subscription core.  If Node is included, the
+route is overridden to use Nodes.  The submodule adds a boolean function to
+Y._env.subscriptionOverrides.domSubscribe and a method
+Y._env.defaultEvent.domSubscribe.  When Y.on is called, the default event
+definition's init method iterates the subscriptionOverrides map, passing the
+arguments to the function.  If the test returns true, the entry key
+(domSubscribe) is used to identify the method to handle the subscription
+(Y._evt.defaultEvent.domSubscribe) and init returns the return value of that
+function called with the init arguments.  For Node subscriptions, the
+subscription is delegated to node.subscribe( args ) (or DOM subscription
+system) and false is returned.
+
+This same approach can then be used to add support for Y.Do behavior to Y.on,
+etc.
+
+
+Synthetic events:
+Synthetic events are no different than published custom events.  They typically
+include init and destroy methods.  If they support a special signature, they
+can override more of the default methods for storing the extra data on the
+subscription and filtering subscription lists with different uniqueness rules.
+
+
+Delegation strategy:
+Delegation is done through instance.delegate(type, filter, callback, *), but sugar is added to subscribe(..) (and on/after) by inclusion of the colon prefixed by some delegation test string.  If multiple colons are present, everything before the last is assumed to be the delegation filter data.  Like other API methods, the event definition or default event definition is passed the calling arguments to do the work.
+
+Examples of this would be
+1) instance.on("drag:start", fn) is equivalent to
+   instance.delegate("start", "drag", fn);
+2) node.on("li.active:click", fn) is equivalent to
+   node.delegate("click", "li.active", fn);
+
+I'm not sure how to address delegation in phases other than "on" in a way that
+doesn't complicate the API.
+
+The default custom event logic for delegate(..)
+(via Y.Event.API.defaultEvent.delegate) accepts a string or boolean function as
+the filter.  Strings are treated as namespace filters, whereby the e.target's
+constructor's static NS property (or ._events.namespace?) is matched against
+the filter string.  If it does not match, the constructor's superclass is
+tested and so on up the superclass chain.  This allows subscriptions to events
+fired by subclasses to be caught as well (e.g. DDPlugin extends DD.Drag).
+
+The default DOM event logic for delegate(..)
+(via Y.Node._events.defaultEvent.delegate) also accepts a string or boolean
+function as the filter.  Strings are treated as selector filters per the
+current delegate behavior.
+
+
+Event type string:
+The type spec for an event passed to instance.on/after/subscribe can be
+"category|filter:type"
+
+
+Other ideas:
+delegation fallback - have Node/DOM's defaultEvent's init method check for an "appliesTo" property of the event definition (assuming specific events are added tto the static collection that proto-wrap the defaultEvent).  If there is such a property, test the instance against that selector string/funtion and if it fails, call instance.delegate(type, appliesTo, ...) and return false to abort the subscription (a la subscription routing in Y.on).  The basis for this idea is impleementing bubbling submit and change events.
+
+DOM event firing - Have the Node._evt.defaultEvent.init subscribe to the DOM event, but rather than having it call host.fire( type ), have it directly call the notification logic on the event.  Then use the event def for fire to simulate the event.  So you could do node.fire('click', { config }); and it would simulate a click event on node and simultaneously notify the subscribers. (Q: Do simulated events bubble?)  Another approach might be to have the fire method simulate the event if it doesn't receive one as input.

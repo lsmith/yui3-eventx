@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+    <title>Test Page</title>
+</head>
+<body class="yui3-skin-sam">
+<p id="x">Treasure</p>
+
+<script src="/dev/lsmith/yui3/build/yui/yui.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-dom.js"></script>
+<script>
+YUI({
+    filter: 'raw'
+}).use('oop','eventx-core','eventx-dom', function (Y) {
+
+var node = document.getElementById('x');
+function go(e) {
+    console.log("Treasure node clicked!");
+    e.detach();
+}
+Y.EventX.DOM.on(node, "click", go);
+Y.EventX.DOM.on(node, "click", go); // duplicates ignored
+
+});
+</script>
+</body>
+</html>

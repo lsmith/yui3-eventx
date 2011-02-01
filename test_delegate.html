@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+    <title>Test Page</title>
+    <style type="text/css">
+    </style>
+</head>
+<body>
+<div id="testbed">
+    <ul>
+        <li>One</li>
+        <li>Two</li>
+        <li>Three</li>
+        <li>Four</li>
+    </ul>
+</div>
+
+<script src="/dev/lsmith/yui3/build/yui/yui.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-dom.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/node.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/do.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-delegate.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-node-delegate.js"></script>
+<script>
+YUI({
+    filter: 'raw'
+}).use('event-do', 'node', 'eventx-node-delegate', function (Y) {
+
+function Papa() {}
+Papa.prototype.onPing = function (e, msg) {
+    console.log("Papa ping: " + msg + " (" + e.get('target').name + ")");
+};
+Y.augment(Papa, Y.EventTarget);
+Y.EventTarget.initEvents(Papa);
+
+function Child(name) {
+    this.name = name;
+}
+Child.NAME = 'child';
+Y.augment(Child, Y.EventTarget);
+Y.EventTarget.initEvents(Child);
+
+function StepChild(name) {
+    this.name = name;
+}
+StepChild.NAME = 'stepchild';
+Y.augment(StepChild, Y.EventTarget);
+Y.EventTarget.initEvents(StepChild);
+
+var papa = new Papa(),
+    child = new Child("Sally"),
+    stepchild = new StepChild("Freddy");
+
+child.addTarget(papa);
+stepchild.addTarget(papa);
+
+papa.on('ping', papa.onPing, papa, "on('ping')");
+papa.delegate('ping', 'child', papa.onPing, papa, "delegate('ping','child')");
+papa.on('stepchild:ping', papa.onPing, papa, "on('stepchild:ping')");
+
+child.fire('ping', { origin: 'child' });
+stepchild.fire('ping', { origin: 'stepchild' });
+
+Y.one('#testbed ul').delegate("click", "li", function (e) {
+    console.log('delegate("click", "li"): ' + e.get('target').get('text'));
+});
+
+Y.one('#testbed ul').on('li:click', function (e) {
+    console.log('on("li:click"): ' + e.get('target').get('text'));
+});
+
+});
+</script>
+</body>
+</html>

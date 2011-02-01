@@ -1,0 +1,1980 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns:yui="http://yuilibrary.com/rdf/1.0/yui.rdf#">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+	<title>API: eventx-core  Y.Event.API   (YUI Library)</title>
+
+	<link rel="stylesheet" type="text/css" href="assets/reset-fonts-grids-min.css" />
+	<link rel="stylesheet" type="text/css" href="assets/api.css" />
+
+    <script type="text/javascript" src="assets/api-js"></script>
+    <script type="text/javascript" src="assets/ac-js"></script>
+</head>
+
+<body id="yahoo-com">
+
+<div id="doc3" class="yui-t2">
+	<div id="hd">
+        <h1><a href="http://developer.yahoo.com/yui/" title="Yahoo! UI Library">Yahoo! UI Library</a></h1>
+        <h3>eventx-core&nbsp; <span class="subtitle">3</span></h3>
+        <a href="./index.html" title="Yahoo! UI Library">Yahoo! UI Library</a> 
+            &gt; <a href="./module_eventx-core.html" title="eventx-core">eventx-core</a>
+                 &gt; Y.Event.API 
+                
+        <form onsubmit="return false">
+            <div id="propertysearch">
+                Search: <input autocomplete="off" id="searchinput" />
+                <div id="searchresults">
+                    &nbsp;
+                </div>
+            </div>
+        </form>
+	</div>
+
+	<div id="bd">
+		<div id="yui-main">
+			<div class="yui-b">
+            <form action="#" name="yui-classopts-form" method="get" id="yui-classopts-form">
+                <fieldset>
+                    <legend>Filters</legend>
+                <span class="classopts"><input type="checkbox" name="show_private" id="show_private" /> <label for="show_private">Show Private</label></span>
+                <span class="classopts"><input type="checkbox" name="show_protected" id="show_protected" /> <label for="show_protected">Show Protected</label></span>
+                <span class="classopts"><input type="checkbox" name="show_deprecated" id="show_deprecated" /> <label for="show_deprecated">Show Deprecated</label></span>
+                </fieldset>
+            </form>
+
+                    <h2>
+                        
+
+                        
+                        
+                            Class <b property="yui:name">Y.Event.API</b>
+                        <span class="extends">
+                        </span>
+
+                    </h2>
+                    <!-- class tree goes here -->
+                    
+                
+  
+
+                    <div class="summary description" property="yui:description">
+                        Augmentation class to add event related API methods to instances of the host
+class.  Use via <code>Y.augment(MyClass, Y.Event.API, true)</code>.
+                    </div>
+
+                        <div class="section constructor details" rel="yui:constructor" resource="#constructor">
+                        <h3 id="constructor">Constructor</h3>
+                        <div class="content">
+                            <div class="detail">
+                                <strong property="yui:name">Y.Event.API</strong>
+                                <code>
+                                    (
+  
+                                        
+                                                
+                                                config
+                                    )
+                                </code>
+                                <div class="description">
+                                        <dl rel="yui:parameters">
+                                            <dt>Parameters:</dt>
+                                                <dd rel="yui:parameter">
+                                                    <code><span property="yui:name">config</span>
+                                                    &lt;<span property="yui:type">Object</span>&gt;
+                                                    </code>
+                                                    <span property="yui:description">  (optional) configuration object for this instance
+(see <code>_initEvents</code> for details)</span>
+                                                </dd>
+                                        </dl>
+                                    
+                                    
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div rel="yui:properties" resource="#properties">
+                        <div class="section field details">
+                            <h3 id="properties">Properties</h3>
+                            <div class="content">
+                                    <div class="protected" rel="yui:property" resource="#property__event">
+                                    <h4><a name="property__event" property="yui:name">_event</a>
+                                        - <code>protected static <span property="yui:type">{Object}</span></code>
+                                    </h4>
+                                    <div class="detail">
+                                        <div class="description" property="yui:description">
+                                            <p>Default prototype for emitted event objects.  Contains the following
+propeties and methods:</p>
+<ul>
+<li><code>_prevent</code></li>
+<li><code>_stop</code></li>
+<li><code>preventDefault()</code></li>
+<li><code>stopPropagation()</code></li>
+<li><code>stopImmediatePropagation()</code></li>
+<li><code>halt()</code> - stopPropagation() + preventDefault()</li>
+<li><code>detach()</code></li>
+</ul>
+                                        </div>
+                                    </div>
+     
+                                        
+
+
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:property" resource="#property_defaultEvent">
+                                    <h4><a name="property_defaultEvent" property="yui:name">defaultEvent</a>
+                                        - <code>static <span property="yui:type">{Object}</span></code>
+                                    </h4>
+                                    <div class="detail">
+                                        <div class="description" property="yui:description">
+                                            <p>Default lifecycle methods for any unknown event being referenced by the
+API. This is the generic custom event behavior.</p>
+<p>To define specific events (only needed if they require special behavior),
+you can describe them statically on the class in an <code>_events</code>
+property.  Typically, you'll want to use the class's defaultEvent as the
+prototype of any special events.  E.g.</p>
+<pre><code>
+. MyClass._events = {
+.     events: {
+.         // define special behavior for a 'foo' event on all instances
+.         foo: Y.Object(Y.Event.API.defaultEvent, {
+.             init: function (host, subscription, callback) { ... }
+.             destroy: function (host, type) { ... }
+.             // all other behaviors inherited from the defaultEvent
+.         })
+.     }
+. };
+. Y.augment(MyClass, Y.Event.API, true);</code></pre>
+<p>If defining new default behaviors for a class, the default event
+definition will need to implement the following methods:</p>
+<ul>
+<li><code>subscribe(host, subscription_kernel, args*)</code></li>
+<li><code>detach(host, subscription, args*)</code></li>
+<li><code>fire(host, type, *)</code></li>
+<li><code>filterSubs(subsArray, subscription_kernel, args*)</code></li>
+</ul>
+<p>Return false from either to prevent the subscription or detach
+respectively.</p>
+<p>The API also supports the following properties/methods:</p>
+<ul>
+<li><code>init(host, subscription_kernel, args*)</code></li>
+<li><code>allowDups</code> (true|false) property</li>
+<li><code>destroy(host, type)</code></li>
+<li><code>test(type, args*)</code> (function)</li>
+</ul>
+<p>Each method is called passing the event definition as 'this', and the
+calling object as the first arg (except for <code>filterSubs</code>).  You
+can include any more or methods or properties on an event definition, but
+the definition object should not manage state (e.g. fireOnce should not
+update a property on the event definition) unless it that state applies to
+all instances and derived event definitions.</p>
+<p>See the descriptions for the individual eventDef methods and
+properties.</p>
+                                        </div>
+                                    </div>
+     
+                                        
+
+
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:property" resource="#property_eventDef.allowDups">
+                                    <h4><a name="property_eventDef.allowDups" property="yui:name">eventDef.allowDups</a>
+                                        - <code>protected static <span property="yui:type">{boolean}</span></code>
+                                    </h4>
+                                    <div class="detail">
+                                        <div class="description" property="yui:description">
+                                            Control whether duplicate subscriptions to this event should be allowed.
+If false, the API will use the event definition's
+<code>filterSubs</code> method to search the existing subscriptions for
+duplicates.  If one is found, the subscription will be aborted before
+reaching the <code>subscribe</code> method.
+                                        </div>
+                                    </div>
+     
+                                        
+
+
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:property" resource="#property_TYPE_PATTERN">
+                                    <h4><a name="property_TYPE_PATTERN" property="yui:name">TYPE_PATTERN</a>
+                                        - <code>protected static <span property="yui:type">{Regexp}</span></code>
+                                    </h4>
+                                    <div class="detail">
+                                        <div class="description" property="yui:description">
+                                            Pattern used to split detach category from event type.  By default,
+It matches <code>on("foo:bar",..)</code> as category "foo" and type
+"bar", and <code>on("baz",..)</code> as category "" and type as "baz".
+                                        </div>
+                                    </div>
+     
+                                        
+                                    <div class="default" property="yui:defaultValue">
+                                        Default Value: /(?:([^:]+?):)?(.*)/
+                                    </div>        
+
+
+                                    <hr />
+                                    </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div rel="yui:methods" resource="#methods">
+                        <div class="section method details">
+                            <h3 id="methods">Methods</h3>
+                            <div class="content">
+                                    <div class="protected" rel="yui:method" resource="#method__initEvents">
+                                    <h4>
+                                        <a name="method__initEvents">_initEvents</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                        
+                                        
+                                        void
+                                            <strong property="yui:name">_initEvents</strong>
+                                           (
+                                                
+                                                        
+                                                         config
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Sets up the event collection, subscription collection, default
+event, and other important state on the instance for managing and
+dispatching events.</p>
+<p>Accepts a config object with the following properties:</p>
+<ul>
+<li><code>events</code> - A collection of specific event
+definitions that override default behaviors for the augmented
+class.</li>
+<li><code>defaultEvent</code> - event definition to use as a
+fallback for references to events not specifically included
+in the events collection.</li>
+<li><code>path</code> - bubble path</li>
+</ul>
+<p>If a config is not specified for the instance, it defaults from
+a static <code>_events</code> property on the class constructor.  If
+a class constructor is not present, the events collection is left
+empty, allowing all events to fall back to the
+<code>defaultEvent</code> methods.  If a <code>defaultEvent</code>
+is not identified, the global <code>Y.Event.API.defaultEvent</code>
+is used.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">config</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  (optional) configuration for this instance</span>
+                                                        </dd>
+                                                </dl>
+
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method__resolveBubblePath">
+                                    <h4>
+                                        <a name="method__resolveBubblePath">_resolveBubblePath</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        Array
+                                            <strong property="yui:name">_resolveBubblePath</strong>
+                                           (
+                                                
+                                                        
+                                                         root
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Flattens the bubble path for a given root instance.  Used by the
+default <code>fire</code> definition, but available for any customized
+<code>fire</code> logic.  Flattens using a breadth-first algo, so given
+the following bubble structure:</p>
+<pre>
+. (D)  (E)   (D)  (F)
+.    \  |     |  /
+.     (B)     (C)       bubble up to
+.        \   /
+.         (A)           bubbles up to</pre>
+<p>The resulting bubble path would be [A, B, C, D, E, F], and not
+[A, B, D, E, C, F] (depth-first).  Also note duplicate targets are
+ignored.  The first appearance in the bubble path wins.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">root</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the origin of the event to bubble (A in the diagram)</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Array
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">the ordered list of target instances</dd>
+                                                </dl>
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method__subscribe">
+                                    <h4>
+                                        <a name="method__subscribe">_subscribe</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                        
+                                        
+                                        Object
+                                            <strong property="yui:name">_subscribe</strong>
+                                           (
+                                                
+                                                        
+                                                         args
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            Does the work for <code>on(..)</code>, <code>after(..)</code>, and
+<code>subscribe(..)</code>.
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args</span>
+                                                        &lt;<span property="yui:type">Array</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  [type, phase, arg*] to identify and dispatch to
+the appropriate event definition</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">this instance</dd>
+                                                </dl>
+
+                                            <div class="chainable">
+                                                <strong>Chainable:</strong> This method is chainable.
+                                            </div>        
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:method" resource="#method_after">
+                                    <h4>
+                                        <a name="method_after">after</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                        
+                                        
+                                        
+                                        Object
+                                            <strong property="yui:name">after</strong>
+                                           (
+                                                
+                                                        
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         arg*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Subscribe to an event on this object.  Subscribers in this
+"after" phase will NOT have access to prevent any default event
+behaviors (if the event permits prevention), but will also not
+be executed unless the default behavior executes.</p>
+<p>The first argument must be a type string identifying the event.
+The string can include a detach category.  Additionally, if no event
+specifically matches the type string, a conditional event might be
+used if its <code>test(..)</code> method indicates a match.
+Otherwise, the default event definition will be used for the
+specified type.</p>
+<p>Individual events can define how the subscription params are
+handled, but the default signature is
+<code>after( type, callback, thisObj, arg0..argN )</code> where
+<code>thisObj</code> will be used for 'this' in the callback, and
+the additional arguments will be passed to the callback after the
+event object.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  event type to subcribe to, with optional detach
+category</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">arg*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  see above note on default signature</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">this instance</dd>
+                                                </dl>
+
+                                            <div class="chainable">
+                                                <strong>Chainable:</strong> This method is chainable.
+                                            </div>        
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:method" resource="#method_bubbleTo">
+                                    <h4>
+                                        <a name="method_bubbleTo">bubbleTo</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                        
+                                        
+                                        
+                                        Object
+                                            <strong property="yui:name">bubbleTo</strong>
+                                           (
+                                                
+                                                        
+                                                         target
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            Add a bubble target, allowing subscriptions from the bubble target
+for events emitted by this object.
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">target</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  instance of an object augmented with Event.API</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">this instance</dd>
+                                                </dl>
+
+                                            <div class="chainable">
+                                                <strong>Chainable:</strong> This method is chainable.
+                                            </div>        
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:method" resource="#method_detach">
+                                    <h4>
+                                        <a name="method_detach">detach</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                        
+                                        
+                                        
+                                        Object
+                                            <strong property="yui:name">detach</strong>
+                                           (
+                                                
+                                                        
+                                                         typeSpec
+                                                    
+                                                
+                                                        , 
+                                                         phase
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Unsubscribe one or multiple subscribers.  Some example signatures
+are:</p>
+<table>
+<thead>
+<tr><th>Called with</th><th>What is detached</th></tr>
+</thead>
+<tbody>
+<tr>
+<td><code>detach()</code></td>
+<td>All subscriptions to all events in all phases</td>
+</tr>
+<tr>
+<td><code>detach(subscriptionObject)</code></td>
+<td>That subscription</td>
+</tr>
+<tr>
+<td><code>detach("foo")</code></td>
+<td>All subscriptions to event "foo" in all phases</td>
+</tr>
+<tr>
+<td><code>detach("foo", "before")</code></td>
+<td>All subscriptions to event "foo" in the "before"
+phases</td>
+</tr>
+<tr>
+<td><code>detach("foo", "before", callbackFunc)*</code></td>
+<td>All subscriptions to event "foo" in the "before"
+phase that are bound to callbackFunc  (*See below for
+notes)</td>
+</tr>
+<tr>
+<td><code>detach("cat:*")</code></td>
+<td>All subscriptions to all events in all phases that
+were subscribed with category "cat" (e.g.
+<code>on("cat:foo", ...)</code>)</td>
+</tr>
+<tr>
+<td><code>detach("cat:foo")</code></td>
+<td>All subscriptions to event "foo" in all phases that
+were subscribed with category "cat"</td>
+</tr>
+</tbody>
+</table>
+<p>Note, parameters beyond the type and phase are passed to the
+event's <code>filterSubs</code> method to apply any signature
+specific filtration for the subscriber list, so the detach signature
+that passes the callback is just an example of the signature
+supported by the default event.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">typeSpec</span>
+                                                        &lt;<span property="yui:type">Object|String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  (optional) event subscription object
+or event type string, optionally with category</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">phase</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  (optional) phase from which to detach</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  additional arguments used by the event's
+<code>filterSubs</code> method to better
+isolate which sub(s) to detach.</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">this instance</dd>
+                                                </dl>
+
+                                            <div class="chainable">
+                                                <strong>Chainable:</strong> This method is chainable.
+                                            </div>        
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef._immediate">
+                                    <h4>
+                                        <a name="method_eventDef._immediate">eventDef._immediate</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        boolean
+                                            <strong property="yui:name">eventDef._immediate</strong>
+                                           (
+                                                
+                                                        
+                                                         host
+                                                    
+                                                
+                                                        , 
+                                                         sub
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            Replacement for the subscribe method on fireOnce events after they've
+fired.  Immediately executes the would be subscription.
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">host</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the instance from which on/after was called</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">sub</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the initial subscription object</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  any additional arguments passed on(type, _here_...)</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            boolean
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">false (prevents formal subscription)</dd>
+                                                </dl>
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef.destroy">
+                                    <h4>
+                                        <a name="method_eventDef.destroy">eventDef.destroy</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        boolean
+                                            <strong property="yui:name">eventDef.destroy</strong>
+                                           (
+                                                
+                                                        
+                                                         host
+                                                    
+                                                
+                                                        , 
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            Final one-time tear down for an event.  E.g. for DOM events, only
+one actual DOM subscription is made, the first time a subscription is
+requested.  A custom event is used to manage this and subsequent
+subscriptions.  After the last subscriber is detached, this is executed.
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">host</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the instance from which on/after was called</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the event to tear down</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  any additional arguments passed on(type, _here_...)</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            boolean
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">true to allow subscription, false to abort</dd>
+                                                </dl>
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef.detach">
+                                    <h4>
+                                        <a name="method_eventDef.detach">eventDef.detach</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        boolean
+                                            <strong property="yui:name">eventDef.detach</strong>
+                                           (
+                                                
+                                                        
+                                                         host
+                                                    
+                                                
+                                                        , 
+                                                         sub
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Subscription tear down or other work that needs to happen each time
+a subscription detach is requested.  If the method returns true, the
+subscription will be detached.  Return false to abort the detach.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">host</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the instance from which on/after was called</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">sub</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the subscription to detach</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  additional arguments passed to <code>detach(..)</code></span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            boolean
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">true to detach, false to abort</dd>
+                                                </dl>
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef.filterSubs">
+                                    <h4>
+                                        <a name="method_eventDef.filterSubs">eventDef.filterSubs</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        Array
+                                            <strong property="yui:name">eventDef.filterSubs</strong>
+                                           (
+                                                
+                                                        
+                                                         subs
+                                                    
+                                                
+                                                        , 
+                                                         refSub
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            Used to prevent duplicate subscriptions (if applicable) and to locate
+the correct subscription(s) to detach.  Takes a list of all applicable
+subscriptions and a subscription kernel and any other arguments
+passed <code>on(type, <em>_here_...</em>)</code> or
+<code>detach(type, phase, <em>_here_...</em>)</code> and returns a list
+of subscriptions that are a potential match based on the input.
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">subs</span>
+                                                        &lt;<span property="yui:type">Array</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  All subscriptions for a given type and phase
+(optionally within a category)</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">refSub</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  subscription kernel identifying host, type,
+phase, and category</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  additional arguments passed to on(..) or detach(..)
+used to refine the filter</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Array
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">all subscription objects not filtered out</dd>
+                                                </dl>
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef.fire">
+                                    <h4>
+                                        <a name="method_eventDef.fire">eventDef.fire</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        void
+                                            <strong property="yui:name">eventDef.fire</strong>
+                                           (
+                                                
+                                                        
+                                                         host
+                                                    
+                                                
+                                                        , 
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Executes subscribers for the "before" (aka "on") phase for all targets
+in the bubble chain until propagation is stopped or the last target is
+notified.  If not prevented and if the event has one, the default
+behavior is executed.  Then the executes subscribers for the "after"
+phase up the bubble chain.</p>
+<p>If the event is prevented and it has one, the <code>ifPrevented</code>
+method is executed.  "after" phase subscribers are not executed if the
+behavior is prevented.</p>
+<p>Similarly, if the event propagation is stopped and it has one, the
+<code>ifStopped</code> method is executed.  Note, this will not prevent
+the default behavior or the "after" subscribers from being executed.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">host</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the instance from which fire was called</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the event type to dispatch</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  additional args passed <code>fire(type,
+<em>_here_...</em>)</code></span>
+                                                        </dd>
+                                                </dl>
+
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef.generateEvent">
+                                    <h4>
+                                        <a name="method_eventDef.generateEvent">eventDef.generateEvent</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        Object
+                                            <strong property="yui:name">eventDef.generateEvent</strong>
+                                           (
+                                                
+                                                        
+                                                         host
+                                                    
+                                                
+                                                        , 
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Called by fire.  Creates the event object that will be passed to the
+subscribers.  The event has the following properties and methods:</p>
+<ul>
+<li><code>type</code></li>
+<li><code>target</code></li>
+<li><code>preventDefault()</code></li>
+<li><code>_prevent</code> (reserved)</li>
+<li><code>stopPropagation()</code></li>
+<li><code>stopImmediatePropagation()</code></li>
+<li><code>_stop</code> (reserved)</li>
+<li><code>halt()</code> - stopPropagation() + preventDefault()</li>
+<li><code>detach()</code> - detaches the current subscriber</li>
+<li><code>details</code> - array of additional args passed to
+<code>fire(type, <em>_here_...</em>)</code></li>
+</ul>
+<p>If the first additional argument is an object, its properties will be
+added to the event object directly as well as being the object being
+included in the <code>details</code> property.</p>
+<p>Before it is passed to subscribers, its <code>currentTarget</code> and
+<code>subscription</code> properties are updated accordingly by the
+<code>notify</code> method.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">host</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the instance from which on/after was called</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the name of the event</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  additional data provided to subscribers.</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">the event object</dd>
+                                                </dl>
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef.init">
+                                    <h4>
+                                        <a name="method_eventDef.init">eventDef.init</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        void
+                                            <strong property="yui:name">eventDef.init</strong>
+                                           (
+                                                
+                                                        
+                                                         host
+                                                    
+                                                
+                                                        , 
+                                                         sub
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            Initial one-time setup for an event.  E.g. for DOM events, only
+one actual DOM subscription is made, the first time a subscription is
+requested.  A custom event is used to manage this and subsequent
+subscriptions in order to guarantee subscriber execution order.  Also
+see <code>eventDef.destroy</code>.
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">host</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the instance from which on/after was called</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">sub</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the initial subscription object</span>
+                                                        </dd>
+                                                </dl>
+
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef.notify">
+                                    <h4>
+                                        <a name="method_eventDef.notify">eventDef.notify</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        void
+                                            <strong property="yui:name">eventDef.notify</strong>
+                                           (
+                                                
+                                                        
+                                                         path
+                                                    
+                                                
+                                                        , 
+                                                         event
+                                                    
+                                                
+                                                        , 
+                                                         phase
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Executes all the subscribers in a bubble chain for an event in a given
+phase ("before" or "after").  Used by <code>fire</code>.</p>
+<p>If a subscriber calls <code>e.stopImmediatePropagation()</code>, no
+further subscribers will be executed, and if a subscriber calls
+<code>e.stopPropagation()</code>, no further bubble targets will be
+notified.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">path</span>
+                                                        &lt;<span property="yui:type">Array</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  bubble targets in the order they should be notified</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">event</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the event to pass to the subscribers</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">phase</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the phase location of the subscribers</span>
+                                                        </dd>
+                                                </dl>
+
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef.subscribe">
+                                    <h4>
+                                        <a name="method_eventDef.subscribe">eventDef.subscribe</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        boolean
+                                            <strong property="yui:name">eventDef.subscribe</strong>
+                                           (
+                                                
+                                                        
+                                                         host
+                                                    
+                                                
+                                                        , 
+                                                         sub
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Subscription setup or other work that needs to happen each time
+a subscription is requested.  At the point this method receives the
+subscription, it will only contain the following properties:</p>
+<ul>
+<li><code>type</code> - the event name</li>
+<li><code>phase</code> - "on" or "after" (unless your event supports
+more than these two default phases)</li>
+<li><code>category</code> - (string) if the subscription was
+generated with a detach category, e.g. for on('foo:click', ...),
+this would contain "foo"</li>
+<li><code>host</code> - the instance from which on(..) was
+called</li>
+<li><code>detach()</code> - method to detach this subscription</li>
+</ul>
+<p>It is the purpose of this method to add anything uniquely appropriate
+for this event to the subscription, such as <code>sub.callback</code> to
+facilitate notifications or identifying it for detach.</p>
+<p>Return true to allow the subscription to occur, or false to abort.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">host</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the instance from which on/after was called</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">sub</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the initial subscription object</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  any additional arguments passed on(type, _here_...)</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            boolean
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">true to allow subscription, false to abort</dd>
+                                                </dl>
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="protected" rel="yui:method" resource="#method_eventDef.test">
+                                    <h4>
+                                        <a name="method_eventDef.test">eventDef.test</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                         protected 
+                                         static 
+                                        
+                                        boolean
+                                            <strong property="yui:name">eventDef.test</strong>
+                                           (
+                                                
+                                                        
+                                                         host
+                                                    
+                                                
+                                                        , 
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Test the provided event type string and other args passed to
+<code>on(type, ...)</code> or <code>after(type, ...)</code> to indicate
+that this event definition should handle the subscription.  By default,
+event mapping is a direct type string => event definition.  This allows
+for more generic type strings that can be used to trigger specific
+behavior in the <code>init</code> or <code>subscribe</code> methods.
+An example would be a regex based test that matched
+<code>on("key(shift+enter)", ...)</code>.</p>
+<p>Return true to indicate that this event should handle the
+subscription.</p>
+<p>This is optional for any event, but can also be included in a default
+event.  By default, a simple type => event mapping is used.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">host</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the instance from which on/after was called</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the type string passed to <code>on(..)</code> or
+<code>after(..)</code></span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  additional arguments after type and phase (e.g.
+callback function)</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            boolean
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">true to indicate that this event should handle the
+subscription</dd>
+                                                </dl>
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:method" resource="#method_fire">
+                                    <h4>
+                                        <a name="method_fire">fire</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                        
+                                        
+                                        
+                                        Object
+                                            <strong property="yui:name">fire</strong>
+                                           (
+                                                
+                                                        
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         args*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Trigger the execution of subscribers to a specific event.  The
+particular logic used for the notification is defined in the event
+definition's <code>fire(..)</code> method.  If not specified there,
+the default event's <code>fire(..)</code method is used.</p>
+<p>As noted in <code>eventDef.fire</code>, the global default
+event's <code>fire</code> executes the "before" (aka "on") phase
+subscribers, then the event's default behavior if it has one, then
+the "after" phase subscribers, but this can be overridden per
+event.  More detail is available in the API doc for
+the (protected) <code>eventDef.fire</code> method.</p>
+<p>The type string alone will be used to identify the event whose
+<code>fire</code> definition should be used, and will not be
+compared against conditional events' <code>test(..)</code>
+methods.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the type identifying the event whose
+<code>fire(..)</code> to use.</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">args*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  extra arguments to pass along</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">this instance</dd>
+                                                </dl>
+
+                                            <div class="chainable">
+                                                <strong>Chainable:</strong> This method is chainable.
+                                            </div>        
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:method" resource="#method_getEvent">
+                                    <h4>
+                                        <a name="method_getEvent">getEvent</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                        
+                                        
+                                        
+                                        Object
+                                            <strong property="yui:name">getEvent</strong>
+                                           (
+                                                
+                                                        
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         match
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            Finds the best match for the type specified, optionally testing
+against any hosted conditional events.  If all else fails, the
+default event definition is returned.
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the name of the event</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">match</span>
+                                                        &lt;<span property="yui:type">Array</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  (optional) additional args to pass to
+<code>test(..)</code> to match against any
+hosted conditional events</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">an event definition object</dd>
+                                                </dl>
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:method" resource="#method_hasSubscribers">
+                                    <h4>
+                                        <a name="method_hasSubscribers">hasSubscribers</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                        
+                                        
+                                        
+                                        boolean
+                                            <strong property="yui:name">hasSubscribers</strong>
+                                           (
+                                                
+                                                        
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         phase
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Returns true if there are any subscriptions in a given phase for
+a particular event.  If no phase is specified, all phases are
+checked.</p>
+<p>The type string alone will be used to identify the event whose
+<code>fire</code> definition should be used, and will not be
+compared against conditional events' <code>test(..)</code>
+methods.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  the name of the event</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">phase</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  (optional) the phase in which to check</span>
+                                                        </dd>
+                                                </dl>
+
+
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:method" resource="#method_on">
+                                    <h4>
+                                        <a name="method_on">on</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                        
+                                        
+                                        
+                                        Object
+                                            <strong property="yui:name">on</strong>
+                                           (
+                                                
+                                                        
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         arg*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Subscribe to an event on this object.  Subscribers in this
+"before" phase will have access to prevent any default event
+behaviors (if the event permits prevention).</p>
+<p>The first argument must be a type string identifying the event.
+The string can include a detach category.  Additionally, if no event
+specifically matches the type string, a conditional event might be
+used if its <code>test(..)</code> method indicates a match.
+Otherwise, the default event definition will be used for the
+specified type.</p>
+<p>Individual events can define how the subscription params are
+handled, but the default signature is
+<code>on( type, callback, thisObj, arg0..argN )</code> where
+<code>thisObj</code> will be used for 'this' in the callback, and
+the additional arguments will be passed to the callback after the
+event object.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  event type to subcribe to, with optional detach
+category</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">arg*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  see above note on default signature</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">this instance</dd>
+                                                </dl>
+
+                                            <div class="chainable">
+                                                <strong>Chainable:</strong> This method is chainable.
+                                            </div>        
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:method" resource="#method_publish">
+                                    <h4>
+                                        <a name="method_publish">publish</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                        
+                                        
+                                        
+                                        Object
+                                            <strong property="yui:name">publish</strong>
+                                           (
+                                                
+                                                        
+                                                         eventDef
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Add a new event to this instance's collection of events.  Use
+this to add an event with specific default behavior, ifPrevented
+behavior, or special subscription/detach logic (etc).  If the event
+doesn't behave in any way different from the default, you don't have
+to publish it.  If the event applies to all instances, define it in
+the static <code>_events</code> collection for the class.</p>
+<p>Accepts an event definition object with properties and methods to
+override those defined in the <code>defaultEvent</code>.  See the
+description of <code>Y.Event.API.defaultEvent</code> for the
+properties and methods to include.  Any methods or properties not
+defined will be provided by the <code>defaultEvent</code>.</p>
+<p>If the <code>pattern</code> property is set to a regular
+expression, it will be wrapped in a memoized <code>test</code>
+function automatically.</p>
+<p>Include a <code>type</code> property in the event definition, or
+pass the type string as the first parameter and the overrides as the
+second.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">eventDef</span>
+                                                        &lt;<span property="yui:type">Object</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  collection of event methods/properties</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">the instance</dd>
+                                                </dl>
+
+                                            <div class="chainable">
+                                                <strong>Chainable:</strong> This method is chainable.
+                                            </div>        
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                                    <div class="" rel="yui:method" resource="#method_subscribe">
+                                    <h4>
+                                        <a name="method_subscribe">subscribe</a></h4>
+                                    <div class="detail" >
+                                        <code>
+                                        
+                                        
+                                        
+                                        Object
+                                            <strong property="yui:name">subscribe</strong>
+                                           (
+                                                
+                                                        
+                                                         type
+                                                    
+                                                
+                                                        , 
+                                                         phase
+                                                    
+                                                
+                                                        , 
+                                                         arg*
+                                                    
+                                                
+                                            )
+                                        </code>
+                                        
+                                        <div class="description" property="yui:description">
+                                            <p>Subscribe to an event on this object.  This method is a catchall
+for events that might support more than the standard "before" (aka
+"on") and "after" phases.  This method allows for subscription to
+any event phase.</p>
+<p>The first argument must be a type string identifying the event.
+The string can include a detach category.  Additionally, if no event
+specifically matches the type string, a conditional event might be
+used if its <code>test(..)</code> method indicates a match.
+Otherwise, the default event definition will be used for the
+specified type.</p>
+<p>The second argument must be a phase string.  Passing the string
+"before", for example, mimics the behavior of
+<code>on(...)</code>.</p>
+<p>Individual events can define how the subscription params are
+handled, but the default signature is
+<code>subscribe( type, phase, callback, thisObj, arg0..argN )</code>
+where <code>thisObj</code> will be used for 'this' in the callback,
+and the additional arguments will be passed to the callback after
+the event object.</p>
+                                        </div>
+
+                                        <div class="description">
+
+                                                <dl rel="yui:parameters">
+                                                    <dt>Parameters:</dt>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">type</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  event type to subcribe to, with optional detach
+category</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">phase</span>
+                                                        &lt;<span property="yui:type">String</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  event phase to attach subscription</span>
+                                                        </dd>
+                                                        <dd rel="yui:parameter">
+                                                        <code><span property="yui:name">arg*</span>
+                                                        &lt;<span property="yui:type">any</span>&gt;
+                                                        </code>
+                                                        <span property="yui:description">  see above note on default signature</span>
+                                                        </dd>
+                                                </dl>
+
+                                                <dl>
+                                                    <dt>Returns:
+                                                    <code property="yui:return">
+                                                            Object
+                                                    </code></dt>
+                                                    <dd property="yui:returnInfo">this instance</dd>
+                                                </dl>
+
+                                            <div class="chainable">
+                                                <strong>Chainable:</strong> This method is chainable.
+                                            </div>        
+
+             
+
+                                        </div>
+
+                                    </div>
+                                    <hr />
+                                    </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div rel="yui:events" resource="#events">
+
+
+                    </div>
+
+                    <div rel="yui:attributes" resource="#configattributes">
+
+                    </div>
+
+			</div>
+		</div>
+		<div class="yui-b">
+            <div class="nav">
+
+                    <div id="moduleList" class="module">
+                        <h4>Modules</h4>
+                        <ul class="content">
+                                <li class="selected"><a href="module_eventx-core.html" title="eventx-core">eventx-core</a></li>
+                        </ul>
+                    </div>
+
+                    <div id="classList" class="module">
+                        <h4>Classes</h4>
+                        <ul class="content">
+                                <li class="selected"><a href="Y.Event.API.html" title="Y.Event.API">Y.Event.API</a></li>
+                        </ul>
+                    </div>
+
+                    <div id="fileList" class="module">
+                        <h4>Files</h4>
+                        <ul class="content">        
+                                <li class=""><a href="event-dom-ie.js.html" title="event-dom-ie.js">event-dom-ie.js</a></li>
+                                <li class=""><a href="event-dom.js.html" title="event-dom.js">event-dom.js</a></li>
+                                <li class=""><a href="event-min.js.html" title="event-min.js">event-min.js</a></li>
+                                <li class=""><a href="event-node-domready.js.html" title="event-node-domready.js">event-node-domready.js</a></li>
+                                <li class=""><a href="event-node-focus.js.html" title="event-node-focus.js">event-node-focus.js</a></li>
+                                <li class=""><a href="event-node.js.html" title="event-node.js">event-node.js</a></li>
+                                <li class=""><a href="event.js.html" title="event.js">event.js</a></li>
+                        </ul>
+                    </div>
+
+                    <div id="propertyList" class="module">
+                        <h4>Properties</h4>
+                        <ul class="content">        
+                                <li class="protected"><a href="#property__event" title="_event">_event</a></li>
+                                <li class=""><a href="#property_defaultEvent" title="defaultEvent">defaultEvent</a></li>
+                                <li class="protected"><a href="#property_eventDef.allowDups" title="eventDef.allowDups">eventDef.allowDups</a></li>
+                                <li class="protected"><a href="#property_TYPE_PATTERN" title="TYPE_PATTERN">TYPE_PATTERN</a></li>
+                        </ul>
+                    </div>
+
+                    <div id="methodsList" class="module">
+                        <h4>Methods</h4>
+                        <ul class="content">        
+                                <li class="protected"><a href="#method__initEvents" title="_initEvents">_initEvents</a></li>
+                                <li class="protected"><a href="#method__resolveBubblePath" title="_resolveBubblePath">_resolveBubblePath</a></li>
+                                <li class="protected"><a href="#method__subscribe" title="_subscribe">_subscribe</a></li>
+                                <li class=""><a href="#method_after" title="after">after</a></li>
+                                <li class=""><a href="#method_bubbleTo" title="bubbleTo">bubbleTo</a></li>
+                                <li class=""><a href="#method_detach" title="detach">detach</a></li>
+                                <li class="protected"><a href="#method_eventDef._immediate" title="eventDef._immediate">eventDef._immediate</a></li>
+                                <li class="protected"><a href="#method_eventDef.destroy" title="eventDef.destroy">eventDef.destroy</a></li>
+                                <li class="protected"><a href="#method_eventDef.detach" title="eventDef.detach">eventDef.detach</a></li>
+                                <li class="protected"><a href="#method_eventDef.filterSubs" title="eventDef.filterSubs">eventDef.filterSubs</a></li>
+                                <li class="protected"><a href="#method_eventDef.fire" title="eventDef.fire">eventDef.fire</a></li>
+                                <li class="protected"><a href="#method_eventDef.generateEvent" title="eventDef.generateEvent">eventDef.generateEvent</a></li>
+                                <li class="protected"><a href="#method_eventDef.init" title="eventDef.init">eventDef.init</a></li>
+                                <li class="protected"><a href="#method_eventDef.notify" title="eventDef.notify">eventDef.notify</a></li>
+                                <li class="protected"><a href="#method_eventDef.subscribe" title="eventDef.subscribe">eventDef.subscribe</a></li>
+                                <li class="protected"><a href="#method_eventDef.test" title="eventDef.test">eventDef.test</a></li>
+                                <li class=""><a href="#method_fire" title="fire">fire</a></li>
+                                <li class=""><a href="#method_getEvent" title="getEvent">getEvent</a></li>
+                                <li class=""><a href="#method_hasSubscribers" title="hasSubscribers">hasSubscribers</a></li>
+                                <li class=""><a href="#method_on" title="on">on</a></li>
+                                <li class=""><a href="#method_publish" title="publish">publish</a></li>
+                                <li class=""><a href="#method_subscribe" title="subscribe">subscribe</a></li>
+                        </ul>
+                    </div>
+
+
+
+            </div>
+		</div>
+	</div>
+	<div id="ft">
+        <hr />
+        Copyright &copy; 2010 Yahoo! Inc. All rights reserved.
+	</div>
+</div>
+<script type="text/javascript">
+
+    var ALL_YUI_PROPS = [{"url": "Y.Event.API.html#method_after", "access": "", "host": "Y.Event.API", "type": "method", "name": "after"}, {"url": "Y.Event.API.html#method_bubbleTo", "access": "", "host": "Y.Event.API", "type": "method", "name": "bubbleTo"}, {"url": "Y.Event.API.html#property_defaultEvent", "access": "", "host": "Y.Event.API", "type": "property", "name": "defaultEvent"}, {"url": "Y.Event.API.html#method_detach", "access": "", "host": "Y.Event.API", "type": "method", "name": "detach"}, {"url": "Y.Event.API.html#property__event", "access": "protected", "host": "Y.Event.API", "type": "property", "name": "_event"}, {"url": "Y.Event.API.html#property_eventDef.allowDups", "access": "protected", "host": "Y.Event.API", "type": "property", "name": "eventDef.allowDups"}, {"url": "Y.Event.API.html#method_eventDef.destroy", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.destroy"}, {"url": "Y.Event.API.html#method_eventDef.detach", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.detach"}, {"url": "Y.Event.API.html#method_eventDef.filterSubs", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.filterSubs"}, {"url": "Y.Event.API.html#method_eventDef.fire", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.fire"}, {"url": "Y.Event.API.html#method_eventDef.generateEvent", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.generateEvent"}, {"url": "Y.Event.API.html#method_eventDef._immediate", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef._immediate"}, {"url": "Y.Event.API.html#method_eventDef.init", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.init"}, {"url": "Y.Event.API.html#method_eventDef.notify", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.notify"}, {"url": "Y.Event.API.html#method_eventDef.subscribe", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.subscribe"}, {"url": "Y.Event.API.html#method_eventDef.test", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.test"}, {"url": "Y.Event.API.html#method_fire", "access": "", "host": "Y.Event.API", "type": "method", "name": "fire"}, {"url": "Y.Event.API.html#method_getEvent", "access": "", "host": "Y.Event.API", "type": "method", "name": "getEvent"}, {"url": "Y.Event.API.html#method_hasSubscribers", "access": "", "host": "Y.Event.API", "type": "method", "name": "hasSubscribers"}, {"url": "Y.Event.API.html#method__initEvents", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "_initEvents"}, {"url": "Y.Event.API.html#method_on", "access": "", "host": "Y.Event.API", "type": "method", "name": "on"}, {"url": "Y.Event.API.html#method_publish", "access": "", "host": "Y.Event.API", "type": "method", "name": "publish"}, {"url": "Y.Event.API.html#method__resolveBubblePath", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "_resolveBubblePath"}, {"url": "Y.Event.API.html#method__subscribe", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "_subscribe"}, {"url": "Y.Event.API.html#method_subscribe", "access": "", "host": "Y.Event.API", "type": "method", "name": "subscribe"}, {"url": "Y.Event.API.html#property_TYPE_PATTERN", "access": "protected", "host": "Y.Event.API", "type": "property", "name": "TYPE_PATTERN"}];
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+    <title>Test Page</title>
+    <style type="text/css">
+        #testbed {
+            margin: 2em;
+            border: 2px inset;
+            background: #ccc;
+            min-height: 300px;
+        }
+        #foo {
+            margin: 1em;
+            height: 200px;
+            width: 400px;
+            background: #900;
+            color: #fff;
+        }
+    </style>
+</head>
+<body class="yui3-skin-sam">
+<button id="attach">Attach 'available'</button>
+<button id="add">Add element</button>
+<div id="testbed"></div>
+
+<script src="/dev/lsmith/yui3/build/yui/yui.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-dom.js"></script>
+<!--script src="/dev/lsmith/yui3/sandbox/event/eventx/node.js"></script-->
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-available.js"></script>
+<script>
+YUI({
+    filter: 'raw'
+}).use('eventx-available', function (Y) {
+
+function el(id) {
+    return document.getElementById(id);
+}
+
+Y.EventX.DOM.on(el('attach'), 'click', function () {
+    Y.on('available', function (msg) {
+        this.innerHTML = "I'm Available!";
+    }, '#foo');
+
+    el('testbed').innerHTML = 'Waiting...';
+});
+
+Y.EventX.DOM.on(el('add'), 'click', function () {
+    el('testbed').innerHTML = '<div id="foo">I\'m here.</div>';
+});
+
+
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1299 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns:yui="http://yuilibrary.com/rdf/1.0/yui.rdf#">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+	<title>API: eventx-core   event.js  (YUI Library)</title>
+
+	<link rel="stylesheet" type="text/css" href="assets/reset-fonts-grids-min.css" />
+	<link rel="stylesheet" type="text/css" href="assets/api.css" />
+
+    <script type="text/javascript" src="assets/api-js"></script>
+    <script type="text/javascript" src="assets/ac-js"></script>
+</head>
+
+<body id="yahoo-com">
+
+<div id="doc3" class="yui-t2">
+	<div id="hd">
+        <h1><a href="http://developer.yahoo.com/yui/" title="Yahoo! UI Library">Yahoo! UI Library</a></h1>
+        <h3>eventx-core&nbsp; <span class="subtitle">3</span></h3>
+        <a href="./index.html" title="Yahoo! UI Library">Yahoo! UI Library</a> 
+            &gt; <a href="./module_eventx-core.html" title="eventx-core">eventx-core</a>
+                
+                 &gt; event.js (source view) 
+        <form onsubmit="return false">
+            <div id="propertysearch">
+                Search: <input autocomplete="off" id="searchinput" />
+                <div id="searchresults">
+                    &nbsp;
+                </div>
+            </div>
+        </form>
+	</div>
+
+	<div id="bd">
+		<div id="yui-main">
+			<div class="yui-b">
+            <form action="#" name="yui-classopts-form" method="get" id="yui-classopts-form">
+                <fieldset>
+                    <legend>Filters</legend>
+                <span class="classopts"><input type="checkbox" name="show_private" id="show_private" /> <label for="show_private">Show Private</label></span>
+                <span class="classopts"><input type="checkbox" name="show_protected" id="show_protected" /> <label for="show_protected">Show Protected</label></span>
+                <span class="classopts"><input type="checkbox" name="show_deprecated" id="show_deprecated" /> <label for="show_deprecated">Show Deprecated</label></span>
+                </fieldset>
+            </form>
+
+                    <div id="srcout">
+                        <style>
+                            #doc3 .classopts { display:none; }
+                        </style>
+                        <div class="highlight"><pre><span class="cm">/**</span>
+<span class="cm"> * Alternate event API augmentation class.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @module eventx-core</span>
+<span class="cm"> */</span>
+<span class="nx">YUI</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;eventx-core&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">Y</span><span class="p">)</span> <span class="p">{</span>
+
+<span class="c1">// TODO:</span>
+<span class="c1">// - Extract the bubbleTo and bubbling support to a submodule?</span>
+<span class="c1">// - Implement delegate, appliesTo, and delegation in a submodule.</span>
+<span class="c1">// - Implement queuable.</span>
+<span class="c1">// - Implement broadcast? (_evt level for all events?)</span>
+<span class="c1">// - Add support for internal/locked subscriptions (can detach internally only)</span>
+<span class="kd">var</span> <span class="nx">YObject</span>  <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nb">Object</span><span class="p">,</span>
+    <span class="nx">YArray</span>   <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nb">Array</span><span class="p">,</span>
+    <span class="nx">YLang</span>    <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nx">Lang</span><span class="p">,</span>
+    <span class="nx">each</span>     <span class="o">=</span> <span class="nx">YArray</span><span class="p">.</span><span class="nx">each</span><span class="p">,</span>
+    <span class="nx">isObject</span> <span class="o">=</span> <span class="nx">YLang</span><span class="p">.</span><span class="nx">isObject</span><span class="p">,</span>
+    <span class="nx">isString</span> <span class="o">=</span> <span class="nx">YLang</span><span class="p">.</span><span class="nx">isString</span><span class="p">,</span>
+    <span class="nx">proto</span>    <span class="o">=</span> <span class="nx">YObject</span><span class="p">,</span>
+    <span class="nx">toArray</span>  <span class="o">=</span> <span class="nx">YArray</span><span class="p">,</span>
+    <span class="nx">arrayIndex</span> <span class="o">=</span> <span class="nx">YArray</span><span class="p">.</span><span class="nx">indexOf</span><span class="p">,</span>
+    <span class="nx">defaultEventDef</span><span class="p">;</span>
+
+
+<span class="cm">/**</span>
+<span class="cm"> * Augmentation class to add event related API methods to instances of the host</span>
+<span class="cm"> * class.  Use via &lt;code&gt;Y.augment(MyClass, Y.Event.API, true)&lt;/code&gt;.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @class Y.Event.API</span>
+<span class="cm"> * @constructor</span>
+<span class="cm"> * @param config {Object} (optional) configuration object for this instance</span>
+<span class="cm"> *                          (see &lt;code&gt;_initEvents&lt;/code&gt; for details)</span>
+<span class="cm"> */</span>
+<span class="kd">function</span> <span class="nx">API</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">this</span><span class="p">.</span><span class="nx">_initEvents</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">arguments</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Pushes an object onto an array located at the path identified by following</span>
+<span class="cm"> * the property name strings in the &lt;code&gt;path&lt;/code&gt; parameter.  If any</span>
+<span class="cm"> * point on the path doesn&#39;t exist, it is created.  The last point in the path</span>
+<span class="cm"> * should be an array.</span>
+<span class="cm"> *</span>
+<span class="cm"> * E.g. &lt;code&gt;var x = {}; pushToPath(x, [&#39;foo&#39;,&#39;bar&#39;], 1)&lt;/code&gt;</span>
+<span class="cm"> * would result in &lt;code&gt;x&lt;/code&gt; structured like</span>
+<span class="cm"> * &lt;code&gt;{ foo: { bar: [ 1 ] } }&lt;/code&gt;</span>
+<span class="cm"> *</span>
+<span class="cm"> * @method pushToPath</span>
+<span class="cm"> * @param o {Object} object root of the path</span>
+<span class="cm"> * @param path {Array} property names identifying the nesting location</span>
+<span class="cm"> * @param subject {any} the item to push to the array</span>
+<span class="cm"> * @private</span>
+<span class="cm"> */</span>
+<span class="kd">function</span> <span class="nx">pushByPath</span><span class="p">(</span><span class="nx">o</span><span class="p">,</span> <span class="nx">path</span><span class="p">,</span> <span class="nx">subject</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kd">var</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="nx">len</span> <span class="o">=</span> <span class="nx">path</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">len</span><span class="p">;</span> <span class="o">++</span><span class="nx">i</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">o</span> <span class="o">=</span> <span class="nx">o</span><span class="p">[</span><span class="nx">path</span><span class="p">[</span><span class="nx">i</span><span class="p">]]</span> <span class="o">||</span> <span class="p">(</span><span class="nx">o</span><span class="p">[</span><span class="nx">path</span><span class="p">[</span><span class="nx">i</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{});</span>
+    <span class="p">}</span>
+
+    <span class="p">(</span><span class="nx">o</span><span class="p">[</span><span class="nx">path</span><span class="p">[</span><span class="nx">i</span><span class="p">]]</span> <span class="o">||</span> <span class="p">(</span><span class="nx">o</span><span class="p">[</span><span class="nx">path</span><span class="p">[</span><span class="nx">i</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[])).</span><span class="nx">push</span><span class="p">(</span><span class="nx">subject</span><span class="p">);</span>
+<span class="p">}</span>
+
+
+<span class="cm">/**</span>
+<span class="cm"> * &lt;p&gt;Default lifecycle methods for any unknown event being referenced by the</span>
+<span class="cm"> * API. This is the generic custom event behavior.&lt;/p&gt;</span>
+<span class="cm"> *</span>
+<span class="cm"> * &lt;p&gt;To define specific events (only needed if they require special behavior),</span>
+<span class="cm"> * you can describe them statically on the class in an &lt;code&gt;_events&lt;/code&gt;</span>
+<span class="cm"> * property.  Typically, you&#39;ll want to use the class&#39;s defaultEvent as the</span>
+<span class="cm"> * prototype of any special events.  E.g.&lt;/p&gt;</span>
+<span class="cm"> * &lt;pre&gt;&lt;code&gt;</span>
+<span class="cm"> * . MyClass._events = {</span>
+<span class="cm"> * .     events: {</span>
+<span class="cm"> * .         // define special behavior for a &#39;foo&#39; event on all instances</span>
+<span class="cm"> * .         foo: Y.Object(Y.Event.API.defaultEvent, {</span>
+<span class="cm"> * .             init: function (host, subscription, callback) { ... }</span>
+<span class="cm"> * .             destroy: function (host, type) { ... }</span>
+<span class="cm"> * .             // all other behaviors inherited from the defaultEvent</span>
+<span class="cm"> * .         })</span>
+<span class="cm"> * .     }</span>
+<span class="cm"> * . };</span>
+<span class="cm"> * . Y.augment(MyClass, Y.Event.API, true);&lt;/code&gt;&lt;/pre&gt;</span>
+<span class="cm"> *</span>
+<span class="cm"> * &lt;p&gt;If defining new default behaviors for a class, the default event</span>
+<span class="cm"> * definition will need to implement the following methods:&lt;/p&gt;</span>
+<span class="cm"> * &lt;ul&gt;</span>
+<span class="cm"> *     &lt;li&gt;&lt;code&gt;subscribe(host, subscription_kernel, args*)&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm"> *     &lt;li&gt;&lt;code&gt;detach(host, subscription, args*)&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm"> *     &lt;li&gt;&lt;code&gt;fire(host, type, *)&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm"> *     &lt;li&gt;&lt;code&gt;filterSubs(subsArray, subscription_kernel, args*)&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm"> * &lt;/ul&gt;</span>
+<span class="cm"> *</span>
+<span class="cm"> * &lt;p&gt;Return false from either to prevent the subscription or detach</span>
+<span class="cm"> * respectively.&lt;/p&gt;</span>
+<span class="cm"> *</span>
+<span class="cm"> * &lt;p&gt;The API also supports the following properties/methods:&lt;/p&gt;</span>
+<span class="cm"> * &lt;ul&gt;</span>
+<span class="cm"> *     &lt;li&gt;&lt;code&gt;init(host, subscription_kernel, args*)&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm"> *     &lt;li&gt;&lt;code&gt;allowDups&lt;/code&gt; (true|false) property&lt;/li&gt;</span>
+<span class="cm"> *     &lt;li&gt;&lt;code&gt;destroy(host, type)&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm"> *     &lt;li&gt;&lt;code&gt;test(type, args*)&lt;/code&gt; (function)&lt;/li&gt;</span>
+<span class="cm"> * &lt;/ul&gt;</span>
+<span class="cm"> *</span>
+<span class="cm"> * &lt;p&gt;Each method is called passing the event definition as &#39;this&#39;, and the</span>
+<span class="cm"> * calling object as the first arg (except for &lt;code&gt;filterSubs&lt;/code&gt;).  You</span>
+<span class="cm"> * can include any more or methods or properties on an event definition, but</span>
+<span class="cm"> * the definition object should not manage state (e.g. fireOnce should not</span>
+<span class="cm"> * update a property on the event definition) unless it that state applies to</span>
+<span class="cm"> * all instances and derived event definitions.&lt;/p&gt;</span>
+<span class="cm"> *</span>
+<span class="cm"> * &lt;p&gt;See the descriptions for the individual eventDef methods and</span>
+<span class="cm"> * properties.&lt;/p&gt;</span>
+<span class="cm"> * </span>
+<span class="cm"> * @property defaultEvent</span>
+<span class="cm"> * @type {Object}</span>
+<span class="cm"> * @static</span>
+<span class="cm"> */</span>
+<span class="nx">defaultEventDef</span> <span class="o">=</span> <span class="p">{</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Initial one-time setup for an event.  E.g. for DOM events, only</span>
+<span class="cm">     * one actual DOM subscription is made, the first time a subscription is</span>
+<span class="cm">     * requested.  A custom event is used to manage this and subsequent</span>
+<span class="cm">     * subscriptions in order to guarantee subscriber execution order.  Also</span>
+<span class="cm">     * see &lt;code&gt;eventDef.destroy&lt;/code&gt;.</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method eventDef.init</span>
+<span class="cm">     * @param host {Object} the instance from which on/after was called</span>
+<span class="cm">     * @param sub {Object} the initial subscription object</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Final one-time tear down for an event.  E.g. for DOM events, only</span>
+<span class="cm">     * one actual DOM subscription is made, the first time a subscription is</span>
+<span class="cm">     * requested.  A custom event is used to manage this and subsequent</span>
+<span class="cm">     * subscriptions.  After the last subscriber is detached, this is executed.</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method eventDef.destroy</span>
+<span class="cm">     * @param host {Object} the instance from which on/after was called</span>
+<span class="cm">     * @param type {String} the event to tear down</span>
+<span class="cm">     * @param args* {any} any additional arguments passed on(type, _here_...)</span>
+<span class="cm">     * @return {boolean} true to allow subscription, false to abort</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * &lt;p&gt;Test the provided event type string and other args passed to</span>
+<span class="cm">     * &lt;code&gt;on(type, ...)&lt;/code&gt; or &lt;code&gt;after(type, ...)&lt;/code&gt; to indicate</span>
+<span class="cm">     * that this event definition should handle the subscription.  By default,</span>
+<span class="cm">     * event mapping is a direct type string =&gt; event definition.  This allows</span>
+<span class="cm">     * for more generic type strings that can be used to trigger specific</span>
+<span class="cm">     * behavior in the &lt;code&gt;init&lt;/code&gt; or &lt;code&gt;subscribe&lt;/code&gt; methods.</span>
+<span class="cm">     * An example would be a regex based test that matched</span>
+<span class="cm">     * &lt;code&gt;on(&quot;key(shift+enter)&quot;, ...)&lt;/code&gt;.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;Return true to indicate that this event should handle the</span>
+<span class="cm">     * subscription.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;This is optional for any event, but can also be included in a default</span>
+<span class="cm">     * event.  By default, a simple type =&gt; event mapping is used.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method eventDef.test</span>
+<span class="cm">     * @param host {Object} the instance from which on/after was called</span>
+<span class="cm">     * @param type {String} the type string passed to &lt;code&gt;on(..)&lt;/code&gt; or</span>
+<span class="cm">     *                      &lt;code&gt;after(..)&lt;/code&gt;</span>
+<span class="cm">     * @param args* {any} additional arguments after type and phase (e.g.</span>
+<span class="cm">     *                      callback function)</span>
+<span class="cm">     * @return {boolean} true to indicate that this event should handle the</span>
+<span class="cm">     *                      subscription</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * &lt;p&gt;Subscription setup or other work that needs to happen each time</span>
+<span class="cm">     * a subscription is requested.  At the point this method receives the</span>
+<span class="cm">     * subscription, it will only contain the following properties:&lt;/p&gt;</span>
+<span class="cm">     * &lt;ul&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;type&lt;/code&gt; - the event name&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;phase&lt;/code&gt; - &quot;on&quot; or &quot;after&quot; (unless your event supports</span>
+<span class="cm">     *         more than these two default phases)&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;category&lt;/code&gt; - (string) if the subscription was</span>
+<span class="cm">     *         generated with a detach category, e.g. for on(&#39;foo:click&#39;, ...),</span>
+<span class="cm">     *         this would contain &quot;foo&quot;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;host&lt;/code&gt; - the instance from which on(..) was</span>
+<span class="cm">     *         called&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;detach()&lt;/code&gt; - method to detach this subscription&lt;/li&gt;</span>
+<span class="cm">     * &lt;/ul&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;It is the purpose of this method to add anything uniquely appropriate</span>
+<span class="cm">     * for this event to the subscription, such as &lt;code&gt;sub.callback&lt;/code&gt; to</span>
+<span class="cm">     * facilitate notifications or identifying it for detach.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;Return true to allow the subscription to occur, or false to abort.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method eventDef.subscribe</span>
+<span class="cm">     * @param host {Object} the instance from which on/after was called</span>
+<span class="cm">     * @param sub {Object} the initial subscription object</span>
+<span class="cm">     * @param args* {any} any additional arguments passed on(type, _here_...)</span>
+<span class="cm">     * @return {boolean} true to allow subscription, false to abort</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">subscribe</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">subscription</span><span class="p">,</span> <span class="nx">callback</span><span class="p">,</span> <span class="nx">thisObj</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">subscription</span><span class="p">.</span><span class="nx">callback</span> <span class="o">=</span> <span class="nx">callback</span><span class="p">;</span>
+        <span class="nx">subscription</span><span class="p">.</span><span class="nx">thisObj</span>  <span class="o">=</span> <span class="nx">thisObj</span> <span class="o">||</span> <span class="nx">host</span><span class="p">;</span>
+        <span class="nx">subscription</span><span class="p">.</span><span class="nx">payload</span>  <span class="o">=</span> <span class="nx">toArray</span><span class="p">(</span><span class="nx">arguments</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+
+        <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Control whether duplicate subscriptions to this event should be allowed.</span>
+<span class="cm">     * If false, the API will use the event definition&#39;s</span>
+<span class="cm">     * &lt;code&gt;filterSubs&lt;/code&gt; method to search the existing subscriptions for</span>
+<span class="cm">     * duplicates.  If one is found, the subscription will be aborted before</span>
+<span class="cm">     * reaching the &lt;code&gt;subscribe&lt;/code&gt; method.</span>
+<span class="cm">     *</span>
+<span class="cm">     * @property eventDef.allowDups</span>
+<span class="cm">     * @type {boolean}</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Used to prevent duplicate subscriptions (if applicable) and to locate</span>
+<span class="cm">     * the correct subscription(s) to detach.  Takes a list of all applicable</span>
+<span class="cm">     * subscriptions and a subscription kernel and any other arguments</span>
+<span class="cm">     * passed &lt;code&gt;on(type, &lt;em&gt;_here_...&lt;/em&gt;)&lt;/code&gt; or</span>
+<span class="cm">     * &lt;code&gt;detach(type, phase, &lt;em&gt;_here_...&lt;/em&gt;)&lt;/code&gt; and returns a list</span>
+<span class="cm">     * of subscriptions that are a potential match based on the input.</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method eventDef.filterSubs</span>
+<span class="cm">     * @param subs {Array} All subscriptions for a given type and phase</span>
+<span class="cm">     *                     (optionally within a category)</span>
+<span class="cm">     * @param refSub {Object} subscription kernel identifying host, type,</span>
+<span class="cm">     *                      phase, and category</span>
+<span class="cm">     * @param args* {any} additional arguments passed to on(..) or detach(..)</span>
+<span class="cm">     * used to refine the filter</span>
+<span class="cm">     * @return {Array} all subscription objects not filtered out</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">filterSubs</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">subs</span><span class="p">,</span> <span class="nx">refSub</span><span class="p">,</span> <span class="nx">callback</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">callback</span> <span class="o">=</span> <span class="nx">refSub</span><span class="p">.</span><span class="nx">callback</span> <span class="o">||</span> <span class="nx">callback</span><span class="p">;</span>
+    
+        <span class="kd">var</span> <span class="nx">matches</span>  <span class="o">=</span> <span class="p">[],</span>
+            <span class="nx">type</span>     <span class="o">=</span> <span class="nx">refSub</span><span class="p">.</span><span class="nx">type</span><span class="p">,</span>
+            <span class="nx">phase</span>    <span class="o">=</span> <span class="nx">refSub</span><span class="p">.</span><span class="nx">phase</span><span class="p">,</span>
+            <span class="nx">category</span> <span class="o">=</span> <span class="nx">refSub</span><span class="p">.</span><span class="nx">category</span><span class="p">,</span>
+            <span class="nx">i</span><span class="p">,</span> <span class="nx">sub</span><span class="p">;</span>
+
+        <span class="k">for</span> <span class="p">(</span><span class="nx">i</span> <span class="o">=</span> <span class="nx">subs</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">;</span> <span class="o">--</span><span class="nx">i</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">sub</span> <span class="o">=</span> <span class="nx">subs</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>
+            <span class="k">if</span> <span class="p">((</span><span class="o">!</span><span class="nx">type</span>     <span class="o">||</span> <span class="nx">type</span>     <span class="o">===</span> <span class="nx">sub</span><span class="p">.</span><span class="nx">type</span><span class="p">)</span>     <span class="o">&amp;&amp;</span>
+                <span class="p">(</span><span class="o">!</span><span class="nx">phase</span>    <span class="o">||</span> <span class="nx">phase</span>    <span class="o">===</span> <span class="nx">sub</span><span class="p">.</span><span class="nx">phase</span><span class="p">)</span>    <span class="o">&amp;&amp;</span>
+                <span class="p">(</span><span class="o">!</span><span class="nx">callback</span> <span class="o">||</span> <span class="nx">callback</span> <span class="o">===</span> <span class="nx">sub</span><span class="p">.</span><span class="nx">callback</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+                <span class="p">(</span><span class="o">!</span><span class="nx">category</span> <span class="o">||</span> <span class="nx">category</span> <span class="o">===</span> <span class="nx">sub</span><span class="p">.</span><span class="nx">category</span><span class="p">))</span>
+            <span class="p">{</span>
+                <span class="nx">matches</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">sub</span><span class="p">);</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="nx">matches</span><span class="p">;</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * &lt;p&gt;Executes subscribers for the &quot;before&quot; (aka &quot;on&quot;) phase for all targets</span>
+<span class="cm">     * in the bubble chain until propagation is stopped or the last target is</span>
+<span class="cm">     * notified.  If not prevented and if the event has one, the default</span>
+<span class="cm">     * behavior is executed.  Then the executes subscribers for the &quot;after&quot;</span>
+<span class="cm">     * phase up the bubble chain.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;If the event is prevented and it has one, the &lt;code&gt;ifPrevented&lt;/code&gt;</span>
+<span class="cm">     * method is executed.  &quot;after&quot; phase subscribers are not executed if the</span>
+<span class="cm">     * behavior is prevented.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;Similarly, if the event propagation is stopped and it has one, the</span>
+<span class="cm">     * &lt;code&gt;ifStopped&lt;/code&gt; method is executed.  Note, this will not prevent</span>
+<span class="cm">     * the default behavior or the &quot;after&quot; subscribers from being executed.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method eventDef.fire</span>
+<span class="cm">     * @param host {Object} the instance from which fire was called</span>
+<span class="cm">     * @param type {String} the event type to dispatch</span>
+<span class="cm">     * @param args* {any} additional args passed &lt;code&gt;fire(type,</span>
+<span class="cm">     *              &lt;em&gt;_here_...&lt;/em&gt;)&lt;/code&gt;</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">fire</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">path</span>  <span class="o">=</span> <span class="nx">API</span><span class="p">.</span><span class="nx">_resolveBubblePath</span><span class="p">(</span><span class="nx">host</span><span class="p">),</span>
+            <span class="nx">event</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">generateEvent</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">arguments</span><span class="p">);</span>
+            
+        <span class="c1">// on() subscribers</span>
+        <span class="k">this</span><span class="p">.</span><span class="nx">notify</span><span class="p">(</span><span class="nx">path</span><span class="p">,</span> <span class="nx">event</span><span class="p">,</span> <span class="s2">&quot;before&quot;</span><span class="p">);</span>
+
+        <span class="c1">// default/stop/prevent behavior</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">_stop</span> <span class="o">&amp;&amp;</span> <span class="k">this</span><span class="p">.</span><span class="nx">ifStopped</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="nx">ifStopped</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">event</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">_prevent</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">ifPrevented</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">this</span><span class="p">.</span><span class="nx">ifPrevented</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">event</span><span class="p">);</span>
+            <span class="p">}</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">behavior</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">this</span><span class="p">.</span><span class="nx">behavior</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">event</span><span class="p">);</span>
+            <span class="p">}</span>
+
+            <span class="c1">// after() subscribers</span>
+            <span class="k">this</span><span class="p">.</span><span class="nx">notify</span><span class="p">(</span><span class="nx">path</span><span class="p">,</span> <span class="nx">event</span><span class="p">,</span> <span class="s2">&quot;after&quot;</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="c1">// Reroute subscribe to _immediate for fireOnce configurations.  This</span>
+        <span class="c1">// creates a derived event definition on the instance to prevent</span>
+        <span class="c1">// modifying a shared event definition.  See &lt;code&gt;_immediate&lt;/code&gt;.</span>
+        <span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">fireOnce</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">host</span><span class="p">.</span><span class="nx">publish</span><span class="p">({</span>
+                <span class="nx">type</span><span class="o">:</span> <span class="nx">type</span><span class="p">,</span>
+                <span class="nx">subscribe</span> <span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">_immediate</span><span class="p">,</span>
+                <span class="nx">_subscribe</span><span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">subscribe</span><span class="p">,</span>
+                <span class="c1">// cache the event it was initially fired with</span>
+                <span class="nx">_firedWith</span><span class="o">:</span> <span class="nx">event</span>
+            <span class="p">});</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * &lt;p&gt;Executes all the subscribers in a bubble chain for an event in a given</span>
+<span class="cm">     * phase (&quot;before&quot; or &quot;after&quot;).  Used by &lt;code&gt;fire&lt;/code&gt;.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;If a subscriber calls &lt;code&gt;e.stopImmediatePropagation()&lt;/code&gt;, no</span>
+<span class="cm">     * further subscribers will be executed, and if a subscriber calls</span>
+<span class="cm">     * &lt;code&gt;e.stopPropagation()&lt;/code&gt;, no further bubble targets will be</span>
+<span class="cm">     * notified.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method eventDef.notify</span>
+<span class="cm">     * @param path {Array} bubble targets in the order they should be notified</span>
+<span class="cm">     * @param event {Object} the event to pass to the subscribers</span>
+<span class="cm">     * @param phase {String} the phase location of the subscribers</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">notify</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">path</span><span class="p">,</span> <span class="nx">event</span><span class="p">,</span> <span class="nx">phase</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="p">[</span><span class="nx">event</span><span class="p">],</span>
+            <span class="nx">type</span> <span class="o">=</span> <span class="nx">event</span><span class="p">.</span><span class="nx">type</span><span class="p">,</span>
+            <span class="nx">target</span><span class="p">,</span> <span class="nx">subs</span><span class="p">,</span> <span class="nx">sub</span><span class="p">,</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">len</span><span class="p">,</span> <span class="nx">j</span><span class="p">,</span> <span class="nx">jlen</span><span class="p">;</span>
+
+        <span class="k">for</span> <span class="p">(</span><span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="nx">len</span> <span class="o">=</span> <span class="nx">path</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">len</span><span class="p">;</span> <span class="o">++</span><span class="nx">i</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">target</span> <span class="o">=</span> <span class="nx">path</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>
+            <span class="nx">subs</span>   <span class="o">=</span> <span class="nx">target</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">];</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="nx">subs</span> <span class="o">&amp;&amp;</span> <span class="nx">subs</span><span class="p">[</span><span class="nx">phase</span><span class="p">]</span> <span class="o">&amp;&amp;</span> <span class="nx">subs</span><span class="p">[</span><span class="nx">phase</span><span class="p">].</span><span class="nx">length</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">subs</span> <span class="o">=</span> <span class="nx">subs</span><span class="p">[</span><span class="nx">phase</span><span class="p">];</span>
+
+                <span class="nx">event</span><span class="p">.</span><span class="nx">currentTarget</span> <span class="o">=</span> <span class="nx">target</span><span class="p">;</span>
+
+                <span class="k">for</span> <span class="p">(</span><span class="nx">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="nx">jlen</span> <span class="o">=</span> <span class="nx">subs</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">j</span> <span class="o">&lt;</span> <span class="nx">jlen</span><span class="p">;</span> <span class="o">++</span><span class="nx">j</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">sub</span> <span class="o">=</span> <span class="nx">subs</span><span class="p">[</span><span class="nx">j</span><span class="p">];</span>
+
+                    <span class="c1">// facilitate e.subscriber.detach();</span>
+                    <span class="nx">event</span><span class="p">.</span><span class="nx">subscription</span> <span class="o">=</span> <span class="nx">sub</span><span class="p">;</span>
+
+                    <span class="nx">sub</span><span class="p">.</span><span class="nx">callback</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">sub</span><span class="p">.</span><span class="nx">thisObj</span><span class="p">,</span> <span class="nx">args</span><span class="p">.</span><span class="nx">concat</span><span class="p">(</span><span class="nx">sub</span><span class="p">.</span><span class="nx">payload</span><span class="p">));</span>
+
+                    <span class="k">delete</span> <span class="nx">event</span><span class="p">.</span><span class="nx">subscription</span><span class="p">;</span>
+
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">_stop</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="k">break</span><span class="p">;</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+
+                <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">_stop</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">break</span><span class="p">;</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Replacement for the subscribe method on fireOnce events after they&#39;ve</span>
+<span class="cm">     * fired.  Immediately executes the would be subscription.</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method eventDef._immediate</span>
+<span class="cm">     * @param host {Object} the instance from which on/after was called</span>
+<span class="cm">     * @param sub {Object} the initial subscription object</span>
+<span class="cm">     * @param args* {any} any additional arguments passed on(type, _here_...)</span>
+<span class="cm">     * @return {boolean} false (prevents formal subscription)</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">_immediate</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">sub</span><span class="p">,</span> <span class="nx">callback</span><span class="p">,</span> <span class="nx">thisObj</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">event</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_firedWith</span><span class="p">,</span>
+            <span class="nx">abort</span> <span class="o">=</span> <span class="o">!</span><span class="k">this</span><span class="p">.</span><span class="nx">_subscribe</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">arguments</span><span class="p">);</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">abort</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="nx">sub</span><span class="p">.</span><span class="nx">phase</span> <span class="o">===</span> <span class="s2">&quot;before&quot;</span> <span class="o">||</span>
+               <span class="p">(</span><span class="nx">sub</span><span class="p">.</span><span class="nx">phase</span> <span class="o">===</span> <span class="s2">&quot;after&quot;</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="nx">event</span><span class="p">.</span><span class="nx">_prevent</span><span class="p">))</span> <span class="p">{</span>
+                <span class="nx">event</span><span class="p">.</span><span class="nx">subscription</span> <span class="o">=</span> <span class="nx">sub</span><span class="p">;</span>
+                <span class="nx">event</span><span class="p">.</span><span class="nx">currentTarget</span> <span class="o">=</span> <span class="nx">host</span><span class="p">;</span>
+                <span class="nx">sub</span><span class="p">.</span><span class="nx">callback</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">sub</span><span class="p">.</span><span class="nx">thisObj</span><span class="p">,</span> <span class="p">[</span><span class="nx">event</span><span class="p">].</span><span class="nx">concat</span><span class="p">(</span><span class="nx">sub</span><span class="p">.</span><span class="nx">payload</span><span class="p">));</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span> <span class="c1">// signal an abort to the event API</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * &lt;p&gt;Called by fire.  Creates the event object that will be passed to the</span>
+<span class="cm">     * subscribers.  The event has the following properties and methods:&lt;/p&gt;</span>
+<span class="cm">     * &lt;ul&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;type&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;target&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;preventDefault()&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;_prevent&lt;/code&gt; (reserved)&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;stopPropagation()&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;stopImmediatePropagation()&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;_stop&lt;/code&gt; (reserved)&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;halt()&lt;/code&gt; - stopPropagation() + preventDefault()&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;detach()&lt;/code&gt; - detaches the current subscriber&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;details&lt;/code&gt; - array of additional args passed to</span>
+<span class="cm">     *         &lt;code&gt;fire(type, &lt;em&gt;_here_...&lt;/em&gt;)&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     * &lt;/ul&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;If the first additional argument is an object, its properties will be</span>
+<span class="cm">     * added to the event object directly as well as being the object being</span>
+<span class="cm">     * included in the &lt;code&gt;details&lt;/code&gt; property.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;Before it is passed to subscribers, its &lt;code&gt;currentTarget&lt;/code&gt; and</span>
+<span class="cm">     * &lt;code&gt;subscription&lt;/code&gt; properties are updated accordingly by the</span>
+<span class="cm">     * &lt;code&gt;notify&lt;/code&gt; method.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method eventDef.generateEvent</span>
+<span class="cm">     * @param host {Object} the instance from which on/after was called</span>
+<span class="cm">     * @param type {String} the name of the event</span>
+<span class="cm">     * @param args* {any} additional data provided to subscribers.</span>
+<span class="cm">     * @return {Object} the event object</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">generateEvent</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">type</span><span class="p">,</span> <span class="nx">payload</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">event</span> <span class="o">=</span> <span class="nx">proto</span><span class="p">(</span><span class="nx">API</span><span class="p">.</span><span class="nx">_event</span><span class="p">,</span> <span class="p">{</span> <span class="nx">type</span><span class="o">:</span> <span class="nx">type</span> <span class="p">});</span>
+        <span class="nx">event</span><span class="p">.</span><span class="nx">target</span> <span class="o">=</span> <span class="nx">host</span><span class="p">;</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="nx">arguments</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="nx">isObject</span><span class="p">(</span><span class="nx">payload</span><span class="p">))</span> <span class="p">{</span>
+                <span class="nx">Y</span><span class="p">.</span><span class="nx">mix</span><span class="p">(</span><span class="nx">event</span><span class="p">,</span> <span class="nx">payload</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+            <span class="p">}</span>
+
+            <span class="nx">event</span><span class="p">.</span><span class="nx">details</span> <span class="o">=</span> <span class="nx">toArray</span><span class="p">(</span><span class="nx">arguments</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="nx">event</span><span class="p">;</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * &lt;p&gt;Subscription tear down or other work that needs to happen each time</span>
+<span class="cm">     * a subscription detach is requested.  If the method returns true, the</span>
+<span class="cm">     * subscription will be detached.  Return false to abort the detach.&lt;/p&gt;</span>
+<span class="cm">     * </span>
+<span class="cm">     * @method eventDef.detach</span>
+<span class="cm">     * @param host {Object} the instance from which on/after was called</span>
+<span class="cm">     * @param sub {Object} the subscription to detach</span>
+<span class="cm">     * @param args* {any} additional arguments passed to &lt;code&gt;detach(..)&lt;/code&gt;</span>
+<span class="cm">     * @return {boolean} true to detach, false to abort</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">detach</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">host</span><span class="p">,</span> <span class="nx">sub</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="kc">true</span><span class="p">;</span> <span class="p">}</span>
+<span class="p">};</span>
+
+
+<span class="nx">Y</span><span class="p">.</span><span class="nx">mix</span><span class="p">(</span><span class="nx">API</span><span class="p">,</span> <span class="p">{</span>
+    <span class="cm">/**</span>
+<span class="cm">     * Pattern used to split detach category from event type.  By default,</span>
+<span class="cm">     * It matches &lt;code&gt;on(&quot;foo:bar&quot;,..)&lt;/code&gt; as category &quot;foo&quot; and type</span>
+<span class="cm">     * &quot;bar&quot;, and &lt;code&gt;on(&quot;baz&quot;,..)&lt;/code&gt; as category &quot;&quot; and type as &quot;baz&quot;.</span>
+<span class="cm">     *</span>
+<span class="cm">     * @property TYPE_PATTERN</span>
+<span class="cm">     * @type {Regexp}</span>
+<span class="cm">     * @default /(?:([^:]+?):)?(.*)/</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">TYPE_PATTERN</span><span class="o">:</span> <span class="sr">/(?:([^:]+?):)?(.*)/</span><span class="p">,</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * &lt;p&gt;Default prototype for emitted event objects.  Contains the following</span>
+<span class="cm">     * propeties and methods:&lt;/p&gt;</span>
+<span class="cm">     * &lt;ul&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;_prevent&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;_stop&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;preventDefault()&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;stopPropagation()&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;stopImmediatePropagation()&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;halt()&lt;/code&gt; - stopPropagation() + preventDefault()&lt;/li&gt;</span>
+<span class="cm">     *     &lt;li&gt;&lt;code&gt;detach()&lt;/code&gt;&lt;/li&gt;</span>
+<span class="cm">     * &lt;/ul&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * @property _event</span>
+<span class="cm">     * @type {Object}</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">_event</span><span class="o">:</span> <span class="p">{</span>
+        <span class="nx">_prevent</span><span class="o">:</span> <span class="kc">false</span><span class="p">,</span>
+        <span class="nx">_stop</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="nx">preventDefault</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="nx">_prevent</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+        <span class="p">},</span>
+        <span class="nx">stopPropagation</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="nx">_stop</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="p">},</span>
+        <span class="nx">stopImmediatePropagation</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="nx">_stop</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+        <span class="p">},</span>
+        <span class="nx">halt</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="nx">preventDefault</span><span class="p">();</span>
+            <span class="k">this</span><span class="p">.</span><span class="nx">stopPropagation</span><span class="p">();</span>
+        <span class="p">},</span>
+        <span class="c1">// TODO: Too much sugar?  e.subscription.detach() might be enough.</span>
+        <span class="nx">detach</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="nx">subscription</span><span class="p">.</span><span class="nx">detach</span><span class="p">();</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+
+    <span class="c1">// API docs above</span>
+    <span class="nx">defaultEvent</span><span class="o">:</span> <span class="nx">defaultEventDef</span><span class="p">,</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * &lt;p&gt;Flattens the bubble path for a given root instance.  Used by the</span>
+<span class="cm">     * default &lt;code&gt;fire&lt;/code&gt; definition, but available for any customized</span>
+<span class="cm">     * &lt;code&gt;fire&lt;/code&gt; logic.  Flattens using a breadth-first algo, so given</span>
+<span class="cm">     * the following bubble structure:&lt;/p&gt;</span>
+<span class="cm">     * &lt;pre&gt;</span>
+<span class="cm">     * . (D)  (E)   (D)  (F)</span>
+<span class="cm">     * .    \  |     |  /</span>
+<span class="cm">     * .     (B)     (C)       bubble up to</span>
+<span class="cm">     * .        \   /</span>
+<span class="cm">     * .         (A)           bubbles up to&lt;/pre&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * &lt;p&gt;The resulting bubble path would be [A, B, C, D, E, F], and not</span>
+<span class="cm">     * [A, B, D, E, C, F] (depth-first).  Also note duplicate targets are</span>
+<span class="cm">     * ignored.  The first appearance in the bubble path wins.&lt;/p&gt;</span>
+<span class="cm">     *</span>
+<span class="cm">     * @method _resolveBubblePath</span>
+<span class="cm">     * @param root {Object} the origin of the event to bubble (A in the diagram)</span>
+<span class="cm">     * @return {Array} the ordered list of target instances</span>
+<span class="cm">     * @static</span>
+<span class="cm">     * @protected</span>
+<span class="cm">     */</span>
+    <span class="nx">_resolveBubblePath</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">root</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">path</span> <span class="o">=</span> <span class="nx">root</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">bubblePath</span><span class="p">.</span><span class="nx">slice</span><span class="p">(),</span>
+            <span class="nx">known</span><span class="p">,</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span><span class="p">,</span> <span class="nx">target</span><span class="p">;</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="nx">path</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">known</span> <span class="o">=</span> <span class="p">[</span><span class="nx">path</span><span class="p">[</span><span class="mi">0</span><span class="p">]];</span>
+
+            <span class="c1">// Add to the end of the path as we iterate.  This creates a bubble</span>
+            <span class="c1">// path where A&#39;s immediate bubble targets are all notified, then</span>
+            <span class="c1">// each of their respective bubble targets are notified and so on.</span>
+            <span class="c1">// (breadth first)</span>
+            <span class="k">for</span> <span class="p">(</span><span class="nx">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">path</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="o">++</span><span class="nx">i</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">target</span> <span class="o">=</span> <span class="nx">path</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>
+
+                <span class="c1">// protect against infinite loops</span>
+                <span class="k">if</span> <span class="p">(</span><span class="nx">target</span><span class="p">.</span><span class="nx">_evt</span> <span class="o">&amp;&amp;</span> <span class="nx">arrayIndex</span><span class="p">(</span><span class="nx">known</span><span class="p">,</span> <span class="nx">target</span><span class="p">)</span> <span class="o">===</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">known</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">target</span><span class="p">);</span>
+                    <span class="c1">// TODO: Assumes [this] as default path</span>
+                    <span class="nx">path</span><span class="p">.</span><span class="nx">push</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">path</span><span class="p">,</span> <span class="nx">target</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">bubblePath</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span>
+                <span class="p">}</span>
+            <span class="p">};</span>
+
+            <span class="c1">// remove non-unique path entries.</span>
+            <span class="k">for</span> <span class="p">(</span><span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">path</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="o">++</span><span class="nx">i</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">target</span> <span class="o">=</span> <span class="nx">path</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>
+                <span class="k">for</span> <span class="p">(</span><span class="nx">j</span> <span class="o">=</span> <span class="nx">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">;</span> <span class="nx">j</span> <span class="o">&lt;</span> <span class="nx">path</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="o">++</span><span class="nx">j</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">path</span><span class="p">[</span><span class="nx">j</span><span class="p">]</span> <span class="o">===</span> <span class="nx">target</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="nx">path</span><span class="p">.</span><span class="nx">splice</span><span class="p">(</span><span class="nx">j</span><span class="o">--</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="nx">path</span><span class="p">;</span>
+    <span class="p">},</span>
+
+    <span class="nx">prototype</span><span class="o">:</span> <span class="p">{</span>
+        <span class="cm">/**</span>
+<span class="cm">         * &lt;p&gt;Sets up the event collection, subscription collection, default</span>
+<span class="cm">         * event, and other important state on the instance for managing and</span>
+<span class="cm">         * dispatching events.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;Accepts a config object with the following properties:&lt;/p&gt;</span>
+<span class="cm">         * &lt;ul&gt;</span>
+<span class="cm">         *     &lt;li&gt;&lt;code&gt;events&lt;/code&gt; - A collection of specific event</span>
+<span class="cm">         *         definitions that override default behaviors for the augmented</span>
+<span class="cm">         *         class.&lt;/li&gt;</span>
+<span class="cm">         *     &lt;li&gt;&lt;code&gt;defaultEvent&lt;/code&gt; - event definition to use as a</span>
+<span class="cm">         *         fallback for references to events not specifically included</span>
+<span class="cm">         *         in the events collection.&lt;/li&gt;</span>
+<span class="cm">         *     &lt;li&gt;&lt;code&gt;path&lt;/code&gt; - bubble path&lt;/li&gt;</span>
+<span class="cm">         * &lt;/ul&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;If a config is not specified for the instance, it defaults from</span>
+<span class="cm">         * a static &lt;code&gt;_events&lt;/code&gt; property on the class constructor.  If</span>
+<span class="cm">         * a class constructor is not present, the events collection is left</span>
+<span class="cm">         * empty, allowing all events to fall back to the</span>
+<span class="cm">         * &lt;code&gt;defaultEvent&lt;/code&gt; methods.  If a &lt;code&gt;defaultEvent&lt;/code&gt;</span>
+<span class="cm">         * is not identified, the global &lt;code&gt;Y.Event.API.defaultEvent&lt;/code&gt;</span>
+<span class="cm">         * is used.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * @method _initEvents</span>
+<span class="cm">         * @param config {Object} (optional) configuration for this instance</span>
+<span class="cm">         * @protected</span>
+<span class="cm">         */</span>
+        <span class="nx">_initEvents</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">config</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">config</span> <span class="o">=</span> <span class="nx">config</span> <span class="o">||</span> <span class="k">this</span><span class="p">.</span><span class="nx">constructor</span><span class="p">.</span><span class="nx">_events</span> <span class="o">||</span> <span class="p">{};</span>
+
+            <span class="kd">var</span> <span class="nx">events</span><span class="p">,</span> <span class="nx">type</span><span class="p">,</span> <span class="nx">conditionals</span><span class="p">;</span>
+
+            <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="nx">subs</span>     <span class="o">:</span> <span class="p">{},</span> <span class="c1">// subscribers by phase</span>
+                <span class="nx">cats</span>     <span class="o">:</span> <span class="p">{},</span> <span class="c1">// categories by types by phase</span>
+                <span class="nx">init</span>     <span class="o">:</span> <span class="p">{},</span> <span class="c1">// tracks which events have been initialized</span>
+                <span class="nx">events</span>   <span class="o">:</span> <span class="p">(</span><span class="nx">config</span><span class="p">.</span><span class="nx">events</span><span class="p">)</span> <span class="o">?</span> <span class="nx">proto</span><span class="p">(</span><span class="nx">config</span><span class="p">.</span><span class="nx">events</span><span class="p">)</span> <span class="o">:</span> <span class="p">{},</span>
+                <span class="nx">conEvents</span><span class="o">:</span> <span class="p">[],</span>
+
+                <span class="nx">defaultEvent</span><span class="o">:</span> <span class="nx">config</span><span class="p">.</span><span class="nx">defaultEvent</span> <span class="o">||</span> <span class="nx">API</span><span class="p">.</span><span class="nx">defaultEvent</span><span class="p">,</span>
+                <span class="nx">bubblePath</span>  <span class="o">:</span> <span class="p">(</span><span class="nx">config</span><span class="p">.</span><span class="nx">path</span><span class="p">)</span> <span class="o">?</span>
+                                <span class="nx">toArray</span><span class="p">(</span><span class="nx">config</span><span class="p">.</span><span class="nx">path</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">false</span><span class="p">)</span> <span class="o">:</span>
+                                <span class="p">[</span><span class="k">this</span><span class="p">]</span>
+            <span class="p">};</span>
+
+            <span class="nx">events</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">events</span><span class="p">;</span>
+            <span class="nx">conditionals</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">conEvents</span><span class="p">;</span>
+            <span class="k">for</span> <span class="p">(</span><span class="nx">type</span> <span class="k">in</span> <span class="nx">events</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">if</span> <span class="p">(</span><span class="nx">events</span><span class="p">[</span><span class="nx">type</span><span class="p">].</span><span class="nx">test</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">conditionals</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">events</span><span class="p">[</span><span class="nx">type</span><span class="p">]);</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * &lt;p&gt;Add a new event to this instance&#39;s collection of events.  Use</span>
+<span class="cm">         * this to add an event with specific default behavior, ifPrevented</span>
+<span class="cm">         * behavior, or special subscription/detach logic (etc).  If the event</span>
+<span class="cm">         * doesn&#39;t behave in any way different from the default, you don&#39;t have</span>
+<span class="cm">         * to publish it.  If the event applies to all instances, define it in</span>
+<span class="cm">         * the static &lt;code&gt;_events&lt;/code&gt; collection for the class.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;Accepts an event definition object with properties and methods to</span>
+<span class="cm">         * override those defined in the &lt;code&gt;defaultEvent&lt;/code&gt;.  See the</span>
+<span class="cm">         * description of &lt;code&gt;Y.Event.API.defaultEvent&lt;/code&gt; for the</span>
+<span class="cm">         * properties and methods to include.  Any methods or properties not</span>
+<span class="cm">         * defined will be provided by the &lt;code&gt;defaultEvent&lt;/code&gt;.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;If the &lt;code&gt;pattern&lt;/code&gt; property is set to a regular</span>
+<span class="cm">         * expression, it will be wrapped in a memoized &lt;code&gt;test&lt;/code&gt;</span>
+<span class="cm">         * function automatically.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;Include a &lt;code&gt;type&lt;/code&gt; property in the event definition, or</span>
+<span class="cm">         * pass the type string as the first parameter and the overrides as the</span>
+<span class="cm">         * second.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         *</span>
+<span class="cm">         * @method publish</span>
+<span class="cm">         * @param eventDef {Object} collection of event methods/properties</span>
+<span class="cm">         * @return {Object} the instance</span>
+<span class="cm">         * @chainable</span>
+<span class="cm">         */</span>
+        <span class="nx">publish</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">eventDef</span><span class="p">,</span> <span class="nx">o</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">switch</span> <span class="p">(</span><span class="nx">YLang</span><span class="p">.</span><span class="nx">type</span><span class="p">(</span><span class="nx">eventDef</span><span class="p">))</span> <span class="p">{</span>
+                <span class="k">case</span> <span class="s2">&quot;object&quot;</span><span class="o">:</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">eventDef</span><span class="p">.</span><span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="k">break</span><span class="p">;</span>
+                    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+                        <span class="nx">YObject</span><span class="p">.</span><span class="nx">each</span><span class="p">(</span><span class="nx">eventDef</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">def</span><span class="p">,</span> <span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+                            <span class="k">this</span><span class="p">.</span><span class="nx">publish</span><span class="p">(</span><span class="nx">Y</span><span class="p">.</span><span class="nx">mix</span><span class="p">(</span><span class="nx">def</span><span class="p">,</span> <span class="p">{</span> <span class="nx">type</span><span class="o">:</span> <span class="nx">type</span> <span class="p">}));</span>
+                        <span class="p">},</span> <span class="k">this</span><span class="p">);</span>
+                        <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+                    <span class="p">}</span>
+                <span class="k">case</span> <span class="s2">&quot;string&quot;</span><span class="o">:</span>
+                    <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">publish</span><span class="p">(</span><span class="nx">Y</span><span class="p">.</span><span class="nx">mix</span><span class="p">((</span><span class="nx">o</span> <span class="o">||</span> <span class="p">{}),</span> <span class="p">{</span> <span class="nx">type</span><span class="o">:</span> <span class="nx">eventDef</span> <span class="p">}));</span>
+                <span class="k">case</span> <span class="s2">&quot;array&quot;</span> <span class="o">:</span>
+                    <span class="nx">each</span><span class="p">(</span><span class="nx">eventDef</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nx">publish</span><span class="p">,</span> <span class="k">this</span><span class="p">);</span>
+                    <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+                <span class="k">default</span> <span class="o">:</span>
+                    <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+            <span class="p">}</span>
+
+            <span class="c1">// At this point, eventDef should be an object with type and</span>
+            <span class="c1">// optionally pattern or test properties.</span>
+            <span class="kd">var</span> <span class="nx">config</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">,</span>
+                <span class="nx">type</span>   <span class="o">=</span> <span class="nx">eventDef</span><span class="p">.</span><span class="nx">type</span><span class="p">,</span>
+                <span class="nx">known</span><span class="p">;</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">if</span> <span class="p">(</span><span class="nx">eventDef</span><span class="p">.</span><span class="nx">pattern</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="nx">eventDef</span><span class="p">.</span><span class="nx">test</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="c1">// Memoize a test function for the regex</span>
+                    <span class="nx">eventDef</span><span class="p">.</span><span class="nx">test</span> <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nx">cached</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">pattern</span><span class="p">.</span><span class="nx">test</span><span class="p">(</span><span class="nx">type</span><span class="p">);</span>
+                    <span class="p">});</span>
+                <span class="p">}</span>
+
+                <span class="nx">known</span> <span class="o">=</span> <span class="nx">config</span><span class="p">.</span><span class="nx">events</span><span class="p">[</span><span class="nx">type</span><span class="p">];</span>
+
+                <span class="k">if</span> <span class="p">(</span><span class="nx">known</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="c1">// Update definition</span>
+
+                    <span class="c1">// TODO: init and subscribe for each existing sub?  Is</span>
+                    <span class="c1">// there any reasonable way to discover if this is needed?</span>
+
+                    <span class="c1">// Mix if the eventDef was created on this instance, else</span>
+                    <span class="c1">// wrap it with Y.Object for this instance before modifying</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">config</span><span class="p">.</span><span class="nx">events</span><span class="p">.</span><span class="nx">hasOwnProperty</span><span class="p">(</span><span class="nx">type</span><span class="p">))</span> <span class="p">{</span>
+                        <span class="nx">Y</span><span class="p">.</span><span class="nx">mix</span><span class="p">(</span><span class="nx">known</span><span class="p">,</span> <span class="nx">eventDef</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+                    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+                        <span class="nx">config</span><span class="p">.</span><span class="nx">events</span><span class="p">[</span><span class="nx">type</span><span class="p">]</span> <span class="o">=</span> <span class="nx">proto</span><span class="p">(</span><span class="nx">known</span><span class="p">,</span> <span class="nx">eventDef</span><span class="p">);</span>
+                    <span class="p">}</span>
+                <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+                    <span class="nx">config</span><span class="p">.</span><span class="nx">events</span><span class="p">[</span><span class="nx">type</span><span class="p">]</span> <span class="o">=</span> <span class="nx">proto</span><span class="p">(</span><span class="nx">config</span><span class="p">.</span><span class="nx">defaultEvent</span><span class="p">,</span> <span class="nx">eventDef</span><span class="p">);</span>
+
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">config</span><span class="p">.</span><span class="nx">events</span><span class="p">[</span><span class="nx">type</span><span class="p">].</span><span class="nx">test</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="nx">config</span><span class="p">.</span><span class="nx">conEvents</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">config</span><span class="p">.</span><span class="nx">events</span><span class="p">[</span><span class="nx">type</span><span class="p">]);</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+
+            <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * &lt;p&gt;Subscribe to an event on this object.  Subscribers in this</span>
+<span class="cm">         * &quot;before&quot; phase will have access to prevent any default event</span>
+<span class="cm">         * behaviors (if the event permits prevention).&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;The first argument must be a type string identifying the event.</span>
+<span class="cm">         * The string can include a detach category.  Additionally, if no event</span>
+<span class="cm">         * specifically matches the type string, a conditional event might be</span>
+<span class="cm">         * used if its &lt;code&gt;test(..)&lt;/code&gt; method indicates a match.</span>
+<span class="cm">         * Otherwise, the default event definition will be used for the</span>
+<span class="cm">         * specified type.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;Individual events can define how the subscription params are</span>
+<span class="cm">         * handled, but the default signature is</span>
+<span class="cm">         * &lt;code&gt;on( type, callback, thisObj, arg0..argN )&lt;/code&gt; where</span>
+<span class="cm">         * &lt;code&gt;thisObj&lt;/code&gt; will be used for &#39;this&#39; in the callback, and</span>
+<span class="cm">         * the additional arguments will be passed to the callback after the</span>
+<span class="cm">         * event object.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * @method on</span>
+<span class="cm">         * @param type {String} event type to subcribe to, with optional detach</span>
+<span class="cm">         *                      category</span>
+<span class="cm">         * @param arg* {any} see above note on default signature</span>
+<span class="cm">         * @return {Object} this instance</span>
+<span class="cm">         * @chainable</span>
+<span class="cm">         */</span>
+        <span class="nx">on</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="nx">toArray</span><span class="p">(</span><span class="nx">arguments</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+            <span class="nx">args</span><span class="p">.</span><span class="nx">splice</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;before&quot;</span><span class="p">);</span>
+
+            <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">_subscribe</span><span class="p">(</span><span class="nx">args</span><span class="p">);</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * &lt;p&gt;Subscribe to an event on this object.  Subscribers in this</span>
+<span class="cm">         * &quot;after&quot; phase will NOT have access to prevent any default event</span>
+<span class="cm">         * behaviors (if the event permits prevention), but will also not</span>
+<span class="cm">         * be executed unless the default behavior executes.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;The first argument must be a type string identifying the event.</span>
+<span class="cm">         * The string can include a detach category.  Additionally, if no event</span>
+<span class="cm">         * specifically matches the type string, a conditional event might be</span>
+<span class="cm">         * used if its &lt;code&gt;test(..)&lt;/code&gt; method indicates a match.</span>
+<span class="cm">         * Otherwise, the default event definition will be used for the</span>
+<span class="cm">         * specified type.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;Individual events can define how the subscription params are</span>
+<span class="cm">         * handled, but the default signature is</span>
+<span class="cm">         * &lt;code&gt;after( type, callback, thisObj, arg0..argN )&lt;/code&gt; where</span>
+<span class="cm">         * &lt;code&gt;thisObj&lt;/code&gt; will be used for &#39;this&#39; in the callback, and</span>
+<span class="cm">         * the additional arguments will be passed to the callback after the</span>
+<span class="cm">         * event object.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * @method after</span>
+<span class="cm">         * @param type {String} event type to subcribe to, with optional detach</span>
+<span class="cm">         *                      category</span>
+<span class="cm">         * @param arg* {any} see above note on default signature</span>
+<span class="cm">         * @return {Object} this instance</span>
+<span class="cm">         * @chainable</span>
+<span class="cm">         */</span>
+        <span class="nx">after</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="nx">toArray</span><span class="p">(</span><span class="nx">arguments</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+            <span class="nx">args</span><span class="p">.</span><span class="nx">splice</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;after&quot;</span><span class="p">);</span>
+
+            <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">_subscribe</span><span class="p">(</span><span class="nx">args</span><span class="p">);</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * &lt;p&gt;Subscribe to an event on this object.  This method is a catchall</span>
+<span class="cm">         * for events that might support more than the standard &quot;before&quot; (aka</span>
+<span class="cm">         * &quot;on&quot;) and &quot;after&quot; phases.  This method allows for subscription to</span>
+<span class="cm">         * any event phase.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;The first argument must be a type string identifying the event.</span>
+<span class="cm">         * The string can include a detach category.  Additionally, if no event</span>
+<span class="cm">         * specifically matches the type string, a conditional event might be</span>
+<span class="cm">         * used if its &lt;code&gt;test(..)&lt;/code&gt; method indicates a match.</span>
+<span class="cm">         * Otherwise, the default event definition will be used for the</span>
+<span class="cm">         * specified type.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;The second argument must be a phase string.  Passing the string</span>
+<span class="cm">         * &quot;before&quot;, for example, mimics the behavior of</span>
+<span class="cm">         * &lt;code&gt;on(...)&lt;/code&gt;.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;Individual events can define how the subscription params are</span>
+<span class="cm">         * handled, but the default signature is</span>
+<span class="cm">         * &lt;code&gt;subscribe( type, phase, callback, thisObj, arg0..argN )&lt;/code&gt;</span>
+<span class="cm">         * where &lt;code&gt;thisObj&lt;/code&gt; will be used for &#39;this&#39; in the callback,</span>
+<span class="cm">         * and the additional arguments will be passed to the callback after</span>
+<span class="cm">         * the event object.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * @method subscribe</span>
+<span class="cm">         * @param type {String} event type to subcribe to, with optional detach</span>
+<span class="cm">         *                      category</span>
+<span class="cm">         * @param phase {String} event phase to attach subscription</span>
+<span class="cm">         * @param arg* {any} see above note on default signature</span>
+<span class="cm">         * @return {Object} this instance</span>
+<span class="cm">         * @chainable</span>
+<span class="cm">         */</span>
+        <span class="nx">subscribe</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">_subscribe</span><span class="p">(</span><span class="nx">args</span><span class="p">);</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * Does the work for &lt;code&gt;on(..)&lt;/code&gt;, &lt;code&gt;after(..)&lt;/code&gt;, and</span>
+<span class="cm">         * &lt;code&gt;subscribe(..)&lt;/code&gt;.</span>
+<span class="cm">         * </span>
+<span class="cm">         * @param args {Array} [type, phase, arg*] to identify and dispatch to</span>
+<span class="cm">         *                      the appropriate event definition</span>
+<span class="cm">         * @return {Object} this instance</span>
+<span class="cm">         * @chainable</span>
+<span class="cm">         * @protected</span>
+<span class="cm">         */</span>
+        <span class="nx">_subscribe</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">type</span> <span class="o">=</span> <span class="nx">args</span><span class="p">.</span><span class="nx">shift</span><span class="p">(),</span>
+                <span class="nx">phase</span> <span class="o">=</span> <span class="nx">args</span><span class="p">.</span><span class="nx">shift</span><span class="p">(),</span>
+                <span class="nx">typeSpec</span><span class="p">,</span> <span class="nx">category</span><span class="p">,</span> <span class="nx">subs</span><span class="p">,</span> <span class="nx">cats</span><span class="p">,</span>
+                <span class="nx">eventDef</span><span class="p">,</span> <span class="nx">initialize</span><span class="p">,</span> <span class="nx">sub</span><span class="p">,</span> <span class="nx">abort</span><span class="p">,</span> <span class="nx">path</span><span class="p">;</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="nx">isString</span><span class="p">(</span><span class="nx">type</span><span class="p">))</span> <span class="p">{</span>
+                <span class="nx">typeSpec</span> <span class="o">=</span> <span class="nx">type</span><span class="p">.</span><span class="nx">match</span><span class="p">(</span><span class="nx">API</span><span class="p">.</span><span class="nx">TYPE_PATTERN</span><span class="p">)</span> <span class="o">||</span> <span class="p">[];</span>
+                <span class="nx">category</span> <span class="o">=</span> <span class="nx">typeSpec</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+                <span class="nx">subs</span>     <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">subs</span><span class="p">;</span>
+                <span class="nx">cats</span>     <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">cats</span><span class="p">;</span>
+
+                <span class="nx">type</span>     <span class="o">=</span> <span class="nx">typeSpec</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+                <span class="nx">eventDef</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">getEvent</span><span class="p">(</span><span class="nx">type</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+
+                <span class="nx">initialize</span> <span class="o">=</span> <span class="o">!</span><span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">init</span><span class="p">[</span><span class="nx">type</span><span class="p">];</span>
+
+                <span class="nx">sub</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="nx">type</span>    <span class="o">:</span> <span class="nx">type</span><span class="p">,</span>
+                    <span class="nx">phase</span>   <span class="o">:</span> <span class="nx">phase</span><span class="p">,</span>
+                    <span class="nx">category</span><span class="o">:</span> <span class="nx">category</span><span class="p">,</span>
+                    <span class="nx">host</span>    <span class="o">:</span> <span class="k">this</span>
+                <span class="p">};</span>
+
+                <span class="c1">// replace type and phase in calling arguments with</span>
+                <span class="c1">// &#39;this&#39; as the host (for convenience) and the</span>
+                <span class="c1">// subscription kernel.</span>
+                <span class="nx">args</span><span class="p">.</span><span class="nx">unshift</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">sub</span><span class="p">);</span>
+
+                <span class="c1">// TODO: would like to always call the same eventDef method</span>
+                <span class="c1">// and have it default to init where applicable, and</span>
+                <span class="c1">// replace itself with subscribe.  But this would move</span>
+                <span class="c1">// more infrastructural logic into the eventDef, making</span>
+                <span class="c1">// it harder to define new events.  Blerg.  What to do?</span>
+                <span class="k">if</span> <span class="p">(</span><span class="nx">initialize</span> <span class="o">&amp;&amp;</span> <span class="nx">eventDef</span><span class="p">.</span><span class="nx">init</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">abort</span> <span class="o">=</span> <span class="nx">eventDef</span><span class="p">.</span><span class="nx">init</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">eventDef</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+                    <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">init</span><span class="p">[</span><span class="nx">type</span><span class="p">]</span> <span class="o">=</span> <span class="nx">abort</span><span class="p">;</span>
+                <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">eventDef</span><span class="p">.</span><span class="nx">allowDups</span> <span class="o">&amp;&amp;</span>
+                           <span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">]</span> <span class="o">&amp;&amp;</span>
+                           <span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">][</span><span class="nx">phase</span><span class="p">])</span> <span class="p">{</span>
+                    <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">][</span><span class="nx">phase</span><span class="p">];</span>
+                    <span class="nx">abort</span> <span class="o">=</span> <span class="nx">eventDef</span><span class="p">.</span><span class="nx">filterSubs</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">eventDef</span><span class="p">,</span><span class="nx">args</span><span class="p">).</span><span class="nx">length</span><span class="p">;</span>
+                    <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="k">this</span><span class="p">;</span>
+                <span class="p">}</span>
+
+                <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">abort</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">abort</span> <span class="o">=</span> <span class="o">!</span><span class="nx">eventDef</span><span class="p">.</span><span class="nx">subscribe</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">eventDef</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+                <span class="p">}</span>
+
+                <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">abort</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">sub</span><span class="p">.</span><span class="nx">detach</span> <span class="o">=</span> <span class="nx">Y</span><span class="p">.</span><span class="nx">bind</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">detach</span><span class="p">,</span> <span class="k">this</span><span class="p">,</span> <span class="nx">sub</span><span class="p">);</span>
+
+                    <span class="nx">path</span> <span class="o">=</span> <span class="p">[</span><span class="nx">type</span><span class="p">,</span> <span class="nx">phase</span><span class="p">];</span>
+                    <span class="c1">// Officially subscribed</span>
+                    <span class="nx">pushByPath</span><span class="p">(</span><span class="nx">subs</span><span class="p">,</span> <span class="nx">path</span><span class="p">,</span> <span class="nx">sub</span><span class="p">);</span>
+
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">category</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="nx">path</span><span class="p">.</span><span class="nx">unshift</span><span class="p">(</span><span class="nx">category</span><span class="p">);</span>
+                        <span class="nx">pushByPath</span><span class="p">(</span><span class="nx">cats</span><span class="p">,</span> <span class="nx">path</span><span class="p">,</span> <span class="nx">sub</span><span class="p">);</span>
+                    <span class="p">}</span>
+                <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">initialize</span> <span class="o">&amp;&amp;</span> <span class="nx">eventDef</span><span class="p">.</span><span class="nx">destroy</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">eventDef</span><span class="p">.</span><span class="nx">destroy</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">type</span><span class="p">);</span>
+                    <span class="k">delete</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">init</span><span class="p">[</span><span class="nx">type</span><span class="p">];</span>
+                <span class="p">}</span>
+
+            <span class="c1">// Handle signature overloading last to optimize the common case</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">YLang</span><span class="p">.</span><span class="nx">isArray</span><span class="p">(</span><span class="nx">type</span><span class="p">))</span> <span class="p">{</span>
+                <span class="nx">each</span><span class="p">(</span><span class="nx">type</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">n</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nx">n</span><span class="p">;</span>
+                    <span class="k">this</span><span class="p">.</span><span class="nx">subscribe</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+                <span class="p">},</span> <span class="k">this</span><span class="p">);</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">isObject</span><span class="p">(</span><span class="nx">type</span><span class="p">))</span> <span class="p">{</span>
+                <span class="nx">YObject</span><span class="p">.</span><span class="nx">each</span><span class="p">(</span><span class="nx">type</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">arg2</span><span class="p">,</span> <span class="nx">t</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">args</span><span class="p">.</span><span class="nx">unshift</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">phase</span><span class="p">,</span> <span class="nx">arg2</span><span class="p">);</span>
+                    <span class="k">this</span><span class="p">.</span><span class="nx">subscribe</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+                <span class="p">},</span> <span class="k">this</span><span class="p">);</span>
+            <span class="p">}</span>
+
+            <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * Finds the best match for the type specified, optionally testing</span>
+<span class="cm">         * against any hosted conditional events.  If all else fails, the</span>
+<span class="cm">         * default event definition is returned.</span>
+<span class="cm">         *</span>
+<span class="cm">         * @method getEvent</span>
+<span class="cm">         * @param type {String} the name of the event</span>
+<span class="cm">         * @param match {Array} (optional) additional args to pass to</span>
+<span class="cm">         *                      &lt;code&gt;test(..)&lt;/code&gt; to match against any</span>
+<span class="cm">         *                      hosted conditional events</span>
+<span class="cm">         * @return {Object} an event definition object</span>
+<span class="cm">         */</span>
+        <span class="nx">getEvent</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">type</span><span class="p">,</span> <span class="nx">match</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">config</span>   <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">,</span>
+                <span class="nx">eventDef</span> <span class="o">=</span> <span class="nx">config</span><span class="p">.</span><span class="nx">events</span><span class="p">[</span><span class="nx">type</span><span class="p">],</span>
+                <span class="nx">conditionals</span> <span class="o">=</span> <span class="nx">config</span><span class="p">.</span><span class="nx">conEvents</span><span class="p">,</span>
+                <span class="nx">i</span><span class="p">,</span> <span class="nx">len</span><span class="p">,</span> <span class="nx">def</span><span class="p">;</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">eventDef</span> <span class="o">&amp;&amp;</span> <span class="nx">match</span> <span class="o">&amp;&amp;</span> <span class="nx">isString</span><span class="p">(</span><span class="nx">type</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="nx">conditionals</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">match</span> <span class="o">=</span> <span class="nx">match</span><span class="p">.</span><span class="nx">slice</span><span class="p">();</span>
+                <span class="nx">match</span><span class="p">.</span><span class="nx">unshift</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">type</span><span class="p">);</span>
+                <span class="k">for</span> <span class="p">(</span><span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="nx">len</span> <span class="o">=</span> <span class="nx">conditionals</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">len</span><span class="p">;</span> <span class="o">++</span><span class="nx">i</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">def</span> <span class="o">=</span> <span class="nx">conditionals</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">def</span><span class="p">.</span><span class="nx">test</span> <span class="o">&amp;&amp;</span> <span class="nx">def</span><span class="p">.</span><span class="nx">test</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">def</span><span class="p">,</span> <span class="nx">match</span><span class="p">))</span> <span class="p">{</span>
+                        <span class="k">return</span> <span class="nx">def</span><span class="p">;</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+
+            <span class="k">return</span> <span class="nx">eventDef</span> <span class="o">||</span> <span class="nx">config</span><span class="p">.</span><span class="nx">defaultEvent</span><span class="p">;</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * &lt;p&gt;Trigger the execution of subscribers to a specific event.  The</span>
+<span class="cm">         * particular logic used for the notification is defined in the event</span>
+<span class="cm">         * definition&#39;s &lt;code&gt;fire(..)&lt;/code&gt; method.  If not specified there,</span>
+<span class="cm">         * the default event&#39;s &lt;code&gt;fire(..)&lt;/code method is used.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;As noted in &lt;code&gt;eventDef.fire&lt;/code&gt;, the global default</span>
+<span class="cm">         * event&#39;s &lt;code&gt;fire&lt;/code&gt; executes the &quot;before&quot; (aka &quot;on&quot;) phase</span>
+<span class="cm">         * subscribers, then the event&#39;s default behavior if it has one, then</span>
+<span class="cm">         * the &quot;after&quot; phase subscribers, but this can be overridden per</span>
+<span class="cm">         * event.  More detail is available in the API doc for</span>
+<span class="cm">         * the (protected) &lt;code&gt;eventDef.fire&lt;/code&gt; method.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;The type string alone will be used to identify the event whose</span>
+<span class="cm">         * &lt;code&gt;fire&lt;/code&gt; definition should be used, and will not be</span>
+<span class="cm">         * compared against conditional events&#39; &lt;code&gt;test(..)&lt;/code&gt;</span>
+<span class="cm">         * methods.&lt;/p&gt;</span>
+<span class="cm">         * </span>
+<span class="cm">         * @method fire</span>
+<span class="cm">         * @param type {String} the type identifying the event whose</span>
+<span class="cm">         *                      &lt;code&gt;fire(..)&lt;/code&gt; to use.</span>
+<span class="cm">         * @param args* {any} extra arguments to pass along</span>
+<span class="cm">         * @return {Object} this instance</span>
+<span class="cm">         * @chainable</span>
+<span class="cm">         */</span>
+        <span class="nx">fire</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">eventDef</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">getEvent</span><span class="p">(</span><span class="nx">type</span><span class="p">),</span>
+                <span class="nx">args</span> <span class="o">=</span> <span class="nx">toArray</span><span class="p">(</span><span class="nx">arguments</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+
+            <span class="nx">args</span><span class="p">.</span><span class="nx">unshift</span><span class="p">(</span><span class="k">this</span><span class="p">);</span>
+
+            <span class="nx">eventDef</span><span class="p">.</span><span class="nx">fire</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">eventDef</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+
+            <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * &lt;p&gt;Returns true if there are any subscriptions in a given phase for</span>
+<span class="cm">         * a particular event.  If no phase is specified, all phases are</span>
+<span class="cm">         * checked.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;The type string alone will be used to identify the event whose</span>
+<span class="cm">         * &lt;code&gt;fire&lt;/code&gt; definition should be used, and will not be</span>
+<span class="cm">         * compared against conditional events&#39; &lt;code&gt;test(..)&lt;/code&gt;</span>
+<span class="cm">         * methods.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * @method hasSubscribers</span>
+<span class="cm">         * @param type {String} the name of the event</span>
+<span class="cm">         * @param phase {String} (optional) the phase in which to check</span>
+<span class="cm">         * @return {boolean}</span>
+<span class="cm">         */</span>
+        <span class="nx">hasSubscribers</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">type</span><span class="p">,</span> <span class="nx">phase</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">subscriptions</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">],</span>
+                <span class="nx">owns</span> <span class="o">=</span> <span class="nx">YObject</span><span class="p">.</span><span class="nx">owns</span><span class="p">;</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="nx">phase</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">return</span> <span class="p">(</span><span class="nx">subscriptions</span><span class="p">[</span><span class="nx">phase</span><span class="p">]</span> <span class="o">||</span> <span class="p">[]).</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">subscriptions</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">for</span> <span class="p">(</span><span class="nx">phase</span> <span class="k">in</span> <span class="nx">subscriptions</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">owns</span><span class="p">(</span><span class="nx">subscriptions</span><span class="p">[</span><span class="nx">phase</span><span class="p">])</span> <span class="o">&amp;&amp;</span>
+                        <span class="nx">subscriptions</span><span class="p">[</span><span class="nx">phase</span><span class="p">].</span><span class="nx">length</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+
+            <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * &lt;p&gt;Unsubscribe one or multiple subscribers.  Some example signatures</span>
+<span class="cm">         * are:&lt;/p&gt;</span>
+<span class="cm">         * &lt;table&gt;</span>
+<span class="cm">         *     &lt;thead&gt;</span>
+<span class="cm">         *         &lt;tr&gt;&lt;th&gt;Called with&lt;/th&gt;&lt;th&gt;What is detached&lt;/th&gt;&lt;/tr&gt;</span>
+<span class="cm">         *     &lt;/thead&gt;</span>
+<span class="cm">         *     &lt;tbody&gt;</span>
+<span class="cm">         *         &lt;tr&gt;</span>
+<span class="cm">         *             &lt;td&gt;&lt;code&gt;detach()&lt;/code&gt;&lt;/td&gt;</span>
+<span class="cm">         *             &lt;td&gt;All subscriptions to all events in all phases&lt;/td&gt;</span>
+<span class="cm">         *         &lt;/tr&gt;</span>
+<span class="cm">         *         &lt;tr&gt;</span>
+<span class="cm">         *             &lt;td&gt;&lt;code&gt;detach(subscriptionObject)&lt;/code&gt;&lt;/td&gt;</span>
+<span class="cm">         *             &lt;td&gt;That subscription&lt;/td&gt;</span>
+<span class="cm">         *         &lt;/tr&gt;</span>
+<span class="cm">         *         &lt;tr&gt;</span>
+<span class="cm">         *             &lt;td&gt;&lt;code&gt;detach(&quot;foo&quot;)&lt;/code&gt;&lt;/td&gt;</span>
+<span class="cm">         *             &lt;td&gt;All subscriptions to event &quot;foo&quot; in all phases&lt;/td&gt;</span>
+<span class="cm">         *         &lt;/tr&gt;</span>
+<span class="cm">         *         &lt;tr&gt;</span>
+<span class="cm">         *             &lt;td&gt;&lt;code&gt;detach(&quot;foo&quot;, &quot;before&quot;)&lt;/code&gt;&lt;/td&gt;</span>
+<span class="cm">         *             &lt;td&gt;All subscriptions to event &quot;foo&quot; in the &quot;before&quot;</span>
+<span class="cm">         *                 phases&lt;/td&gt;</span>
+<span class="cm">         *         &lt;/tr&gt;</span>
+<span class="cm">         *         &lt;tr&gt;</span>
+<span class="cm">         *             &lt;td&gt;&lt;code&gt;detach(&quot;foo&quot;, &quot;before&quot;, callbackFunc)*&lt;/code&gt;&lt;/td&gt;</span>
+<span class="cm">         *             &lt;td&gt;All subscriptions to event &quot;foo&quot; in the &quot;before&quot;</span>
+<span class="cm">         *                 phase that are bound to callbackFunc  (*See below for</span>
+<span class="cm">         *                 notes)&lt;/td&gt;</span>
+<span class="cm">         *         &lt;/tr&gt;</span>
+<span class="cm">         *         &lt;tr&gt;</span>
+<span class="cm">         *             &lt;td&gt;&lt;code&gt;detach(&quot;cat:*&quot;)&lt;/code&gt;&lt;/td&gt;</span>
+<span class="cm">         *             &lt;td&gt;All subscriptions to all events in all phases that</span>
+<span class="cm">         *                 were subscribed with category &quot;cat&quot; (e.g.</span>
+<span class="cm">         *                 &lt;code&gt;on(&quot;cat:foo&quot;, ...)&lt;/code&gt;)&lt;/td&gt;</span>
+<span class="cm">         *         &lt;/tr&gt;</span>
+<span class="cm">         *         &lt;tr&gt;</span>
+<span class="cm">         *             &lt;td&gt;&lt;code&gt;detach(&quot;cat:foo&quot;)&lt;/code&gt;&lt;/td&gt;</span>
+<span class="cm">         *             &lt;td&gt;All subscriptions to event &quot;foo&quot; in all phases that</span>
+<span class="cm">         *                 were subscribed with category &quot;cat&quot;&lt;/td&gt;</span>
+<span class="cm">         *         &lt;/tr&gt;</span>
+<span class="cm">         *     &lt;/tbody&gt;</span>
+<span class="cm">         * &lt;/table&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * &lt;p&gt;Note, parameters beyond the type and phase are passed to the</span>
+<span class="cm">         * event&#39;s &lt;code&gt;filterSubs&lt;/code&gt; method to apply any signature</span>
+<span class="cm">         * specific filtration for the subscriber list, so the detach signature</span>
+<span class="cm">         * that passes the callback is just an example of the signature</span>
+<span class="cm">         * supported by the default event.&lt;/p&gt;</span>
+<span class="cm">         *</span>
+<span class="cm">         * @method detach</span>
+<span class="cm">         * @param typeSpec {Object|String} (optional) event subscription object</span>
+<span class="cm">         *                      or event type string, optionally with category</span>
+<span class="cm">         * @param phase {String} (optional) phase from which to detach</span>
+<span class="cm">         * @param args* {any} additional arguments used by the event&#39;s</span>
+<span class="cm">         *                      &lt;code&gt;filterSubs&lt;/code&gt; method to better</span>
+<span class="cm">         *                      isolate which sub(s) to detach.</span>
+<span class="cm">         * @return {Object} this instance</span>
+<span class="cm">         * @chainable</span>
+<span class="cm">         */</span>
+        <span class="nx">detach</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">typeSpec</span><span class="p">,</span> <span class="nx">phase</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">args</span>  <span class="o">=</span> <span class="nx">toArray</span><span class="p">(</span><span class="nx">arguments</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">true</span><span class="p">),</span>
+                <span class="nx">subs</span>  <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">subs</span><span class="p">,</span>
+                <span class="nx">type</span><span class="p">,</span> <span class="nx">catAndType</span><span class="p">,</span> <span class="nx">eventDef</span><span class="p">,</span> <span class="nx">remove</span><span class="p">,</span> <span class="nx">sub</span><span class="p">,</span> <span class="nx">ok</span><span class="p">,</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">len</span><span class="p">;</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="nx">typeSpec</span> <span class="o">&amp;&amp;</span> <span class="nx">typeSpec</span><span class="p">.</span><span class="nx">detach</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">remove</span> <span class="o">=</span> <span class="p">[</span><span class="nx">typeSpec</span><span class="p">];</span>
+                <span class="nx">type</span>   <span class="o">=</span> <span class="nx">typeSpec</span><span class="p">.</span><span class="nx">type</span><span class="p">;</span>
+                <span class="nx">phase</span>  <span class="o">=</span> <span class="nx">typeSpec</span><span class="p">.</span><span class="nx">phase</span><span class="p">;</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+                <span class="nx">typeSpec</span>   <span class="o">=</span> <span class="nx">typeSpec</span> <span class="o">||</span> <span class="s1">&#39;*&#39;</span><span class="p">;</span>
+                <span class="nx">catAndType</span> <span class="o">=</span> <span class="nx">typeSpec</span><span class="p">.</span><span class="nx">match</span><span class="p">(</span><span class="nx">API</span><span class="p">.</span><span class="nx">TYPE_PATTERN</span><span class="p">)</span> <span class="o">||</span> <span class="p">[];</span>
+                <span class="nx">type</span>       <span class="o">=</span> <span class="nx">catAndType</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+
+                <span class="k">if</span> <span class="p">(</span><span class="nx">phase</span> <span class="o">&amp;&amp;</span> <span class="nx">type</span> <span class="o">&amp;&amp;</span> <span class="nx">type</span> <span class="o">!==</span> <span class="s1">&#39;*&#39;</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">catAndType</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="p">{</span>
+                        <span class="nx">subs</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">cats</span><span class="p">[</span><span class="nx">catAndType</span><span class="p">[</span><span class="mi">1</span><span class="p">]];</span>
+                    <span class="p">}</span>
+                <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">type</span> <span class="o">===</span> <span class="s1">&#39;*&#39;</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="c1">// TODO: too much intelligence about TYPE_PATTERN?</span>
+                    <span class="c1">// remove the * for iteration</span>
+                    <span class="nx">typeSpec</span> <span class="o">=</span> <span class="nx">typeSpec</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+                    <span class="nx">YObject</span><span class="p">.</span><span class="nx">each</span><span class="p">(</span><span class="nx">subs</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">_</span><span class="p">,</span> <span class="nx">t</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nx">typeSpec</span> <span class="o">+</span> <span class="nx">t</span><span class="p">;</span>
+                        <span class="k">this</span><span class="p">.</span><span class="nx">detach</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+                    <span class="p">},</span> <span class="k">this</span><span class="p">);</span>
+
+                    <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+                <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">phase</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">])</span> <span class="p">{</span>
+                        <span class="nx">YObject</span><span class="p">.</span><span class="nx">each</span><span class="p">(</span><span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">],</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">_</span><span class="p">,</span> <span class="nx">p</span><span class="p">)</span> <span class="p">{</span>
+                            <span class="nx">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nx">p</span><span class="p">;</span>
+                            <span class="k">this</span><span class="p">.</span><span class="nx">detach</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+                        <span class="p">},</span> <span class="k">this</span><span class="p">);</span>
+                    <span class="p">}</span>
+
+                    <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+
+            <span class="c1">// At this point we should have a type and phase</span>
+            <span class="nx">eventDef</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">getEvent</span><span class="p">(</span><span class="nx">type</span><span class="p">);</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">remove</span> <span class="o">&amp;&amp;</span> <span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">]</span> <span class="o">&amp;&amp;</span> <span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">][</span><span class="nx">phase</span><span class="p">])</span> <span class="p">{</span>
+                <span class="nx">args</span><span class="p">.</span><span class="nx">splice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">][</span><span class="nx">phase</span><span class="p">],</span> <span class="p">{</span>
+                    <span class="nx">type</span><span class="o">:</span> <span class="nx">type</span><span class="p">,</span>
+                    <span class="nx">phase</span><span class="o">:</span> <span class="nx">phase</span><span class="p">,</span>
+                    <span class="nx">category</span><span class="o">:</span> <span class="p">(</span><span class="nx">catAndType</span> <span class="o">?</span> <span class="nx">catAndType</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">:</span> <span class="kc">null</span><span class="p">),</span>
+                    <span class="nx">host</span><span class="o">:</span> <span class="k">this</span>
+                <span class="p">});</span>
+                <span class="nx">remove</span> <span class="o">=</span> <span class="nx">eventDef</span><span class="p">.</span><span class="nx">filterSubs</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">eventDef</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+            <span class="p">}</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="nx">remove</span> <span class="o">&amp;&amp;</span> <span class="nx">remove</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="k">this</span><span class="p">;</span>
+                <span class="k">for</span> <span class="p">(</span><span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="nx">len</span> <span class="o">=</span> <span class="nx">remove</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">len</span><span class="p">;</span> <span class="o">++</span><span class="nx">i</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nx">sub</span> <span class="o">=</span> <span class="nx">remove</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>
+                    <span class="nx">ok</span> <span class="o">=</span> <span class="nx">eventDef</span><span class="p">.</span><span class="nx">detach</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">eventDef</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+
+                    <span class="c1">// FIXME: Horribly inefficient</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">ok</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="nx">subs</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">subs</span><span class="p">[</span><span class="nx">type</span><span class="p">][</span><span class="nx">phase</span><span class="p">];</span>
+                        <span class="nx">subs</span><span class="p">.</span><span class="nx">splice</span><span class="p">(</span><span class="nx">arrayIndex</span><span class="p">(</span><span class="nx">subs</span><span class="p">,</span> <span class="nx">sub</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+
+                        <span class="k">if</span> <span class="p">(</span><span class="nx">sub</span><span class="p">.</span><span class="nx">category</span><span class="p">)</span> <span class="p">{</span>
+                            <span class="nx">subs</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">cats</span><span class="p">[</span><span class="nx">sub</span><span class="p">.</span><span class="nx">category</span><span class="p">][</span><span class="nx">type</span><span class="p">][</span><span class="nx">phase</span><span class="p">];</span>
+                            <span class="nx">subs</span><span class="p">.</span><span class="nx">splice</span><span class="p">(</span><span class="nx">arrayIndex</span><span class="p">(</span><span class="nx">subs</span><span class="p">,</span> <span class="nx">sub</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+                        <span class="p">}</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+
+                <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="k">this</span><span class="p">.</span><span class="nx">hasSubscribers</span><span class="p">(</span><span class="nx">type</span><span class="p">))</span> <span class="p">{</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">eventDef</span><span class="p">.</span><span class="nx">destroy</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="nx">eventDef</span><span class="p">.</span><span class="nx">destroy</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">type</span><span class="p">);</span>
+                    <span class="p">}</span>
+                    <span class="k">delete</span> <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">init</span><span class="p">[</span><span class="nx">type</span><span class="p">];</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+            
+            <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+        <span class="p">},</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * Add a bubble target, allowing subscriptions from the bubble target</span>
+<span class="cm">         * for events emitted by this object.</span>
+<span class="cm">         *</span>
+<span class="cm">         * @method bubbleTo</span>
+<span class="cm">         * @param target {Object} instance of an object augmented with Event.API</span>
+<span class="cm">         * @return {Object} this instance</span>
+<span class="cm">         * @chainable</span>
+<span class="cm">         */</span>
+        <span class="nx">bubbleTo</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">target</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="nx">arrayIndex</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">bubblePath</span><span class="p">,</span> <span class="nx">target</span><span class="p">)</span> <span class="o">===</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">this</span><span class="p">.</span><span class="nx">_evt</span><span class="p">.</span><span class="nx">bubblePath</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">target</span><span class="p">);</span>
+            <span class="p">}</span>
+
+            <span class="k">return</span> <span class="k">this</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">},</span> <span class="kc">true</span><span class="p">);</span>
+
+<span class="nx">Y</span><span class="p">.</span><span class="nx">EventX</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">API</span><span class="o">:</span> <span class="nx">API</span> <span class="p">};</span>
+
+<span class="p">});</span>
+</pre></div>
+
+                    </div>
+			</div>
+		</div>
+		<div class="yui-b">
+            <div class="nav">
+
+                    <div id="moduleList" class="module">
+                        <h4>Modules</h4>
+                        <ul class="content">
+                                <li class="selected"><a href="module_eventx-core.html" title="eventx-core">eventx-core</a></li>
+                        </ul>
+                    </div>
+
+                    <div id="classList" class="module">
+                        <h4>Classes</h4>
+                        <ul class="content">
+                                <li class=""><a href="Y.Event.API.html" title="Y.Event.API">Y.Event.API</a></li>
+                        </ul>
+                    </div>
+
+                    <div id="fileList" class="module">
+                        <h4>Files</h4>
+                        <ul class="content">        
+                                <li class=""><a href="event-dom-ie.js.html" title="event-dom-ie.js">event-dom-ie.js</a></li>
+                                <li class=""><a href="event-dom.js.html" title="event-dom.js">event-dom.js</a></li>
+                                <li class=""><a href="event-min.js.html" title="event-min.js">event-min.js</a></li>
+                                <li class=""><a href="event-node-domready.js.html" title="event-node-domready.js">event-node-domready.js</a></li>
+                                <li class=""><a href="event-node-focus.js.html" title="event-node-focus.js">event-node-focus.js</a></li>
+                                <li class=""><a href="event-node.js.html" title="event-node.js">event-node.js</a></li>
+                                <li class="selected"><a href="event.js.html" title="event.js">event.js</a></li>
+                        </ul>
+                    </div>
+
+
+
+
+
+            </div>
+		</div>
+	</div>
+	<div id="ft">
+        <hr />
+        Copyright &copy; 2010 Yahoo! Inc. All rights reserved.
+	</div>
+</div>
+<script type="text/javascript">
+
+    var ALL_YUI_PROPS = [{"url": "Y.Event.API.html#method_after", "access": "", "host": "Y.Event.API", "type": "method", "name": "after"}, {"url": "Y.Event.API.html#method_bubbleTo", "access": "", "host": "Y.Event.API", "type": "method", "name": "bubbleTo"}, {"url": "Y.Event.API.html#property_defaultEvent", "access": "", "host": "Y.Event.API", "type": "property", "name": "defaultEvent"}, {"url": "Y.Event.API.html#method_detach", "access": "", "host": "Y.Event.API", "type": "method", "name": "detach"}, {"url": "Y.Event.API.html#property__event", "access": "protected", "host": "Y.Event.API", "type": "property", "name": "_event"}, {"url": "Y.Event.API.html#property_eventDef.allowDups", "access": "protected", "host": "Y.Event.API", "type": "property", "name": "eventDef.allowDups"}, {"url": "Y.Event.API.html#method_eventDef.destroy", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.destroy"}, {"url": "Y.Event.API.html#method_eventDef.detach", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.detach"}, {"url": "Y.Event.API.html#method_eventDef.filterSubs", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.filterSubs"}, {"url": "Y.Event.API.html#method_eventDef.fire", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.fire"}, {"url": "Y.Event.API.html#method_eventDef.generateEvent", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.generateEvent"}, {"url": "Y.Event.API.html#method_eventDef._immediate", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef._immediate"}, {"url": "Y.Event.API.html#method_eventDef.init", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.init"}, {"url": "Y.Event.API.html#method_eventDef.notify", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.notify"}, {"url": "Y.Event.API.html#method_eventDef.subscribe", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.subscribe"}, {"url": "Y.Event.API.html#method_eventDef.test", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "eventDef.test"}, {"url": "Y.Event.API.html#method_fire", "access": "", "host": "Y.Event.API", "type": "method", "name": "fire"}, {"url": "Y.Event.API.html#method_getEvent", "access": "", "host": "Y.Event.API", "type": "method", "name": "getEvent"}, {"url": "Y.Event.API.html#method_hasSubscribers", "access": "", "host": "Y.Event.API", "type": "method", "name": "hasSubscribers"}, {"url": "Y.Event.API.html#method__initEvents", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "_initEvents"}, {"url": "Y.Event.API.html#method_on", "access": "", "host": "Y.Event.API", "type": "method", "name": "on"}, {"url": "Y.Event.API.html#method_publish", "access": "", "host": "Y.Event.API", "type": "method", "name": "publish"}, {"url": "Y.Event.API.html#method__resolveBubblePath", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "_resolveBubblePath"}, {"url": "Y.Event.API.html#method__subscribe", "access": "protected", "host": "Y.Event.API", "type": "method", "name": "_subscribe"}, {"url": "Y.Event.API.html#method_subscribe", "access": "", "host": "Y.Event.API", "type": "method", "name": "subscribe"}, {"url": "Y.Event.API.html#property_TYPE_PATTERN", "access": "protected", "host": "Y.Event.API", "type": "property", "name": "TYPE_PATTERN"}];
+</script>
+</body>
+</html>
