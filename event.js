@@ -23,25 +23,27 @@ var YObject    = Y.Object,
     owns       = YObject.owns;
 
 
+/**
+ * Assigns a property:value to an object at an arbitrary depth indicated in the
+ * <code>path</code> parameter.  If any point on the path doesn't exist, it is
+ * created.
+ *
+ * E.g. <code>var x = {}; setByPath(x, ['foo','bar'], 1)</code>
+ * would result in <code>x</code> structured like
+ * <code>{ foo: { bar: 1 } }</code>
+ *
+ * @method setByPath
+ * @param o {Object} object root of the path
+ * @param path {Array} property names identifying the nesting location
+ * @param subject {any} the item to push to the array
+ * @private
+ */
 function setByPath(o, path, val) {
     for (var i = 0, len = path.length - 1; i < len; ++i) {
         o = o[path[i]] || (o[path[i]] = {});
     }
 
     o[i] = val;
-}
-
-/**
- * Augmentation class to add event related API methods to instances of the host
- * class.  Use via <code>Y.augment(MyClass, Y.Event.API, true)</code>.
- *
- * @class Y.Event.Target
- * @constructor
- * @param config {Object} (optional) configuration object for this instance
- *                          (see <code>_initEvents</code> for details)
- */
-function EventTarget() {
-    this._initEvents.apply(this, arguments);
 }
 
 /**
@@ -68,31 +70,51 @@ function pushByPath(o, path, subject) {
     (o[path[i]] || (o[path[i]] = [])).push(subject);
 }
 
+/**
+ * Augmentation class to add event related API methods to instances of the host
+ * class.  Extend the class by any of the following methods:
+ * <ul>
+ *   <li><code>Y.augment(MyClass, Y.Event.Target, true);</code></li>
+ *   <li><code>Y.extend(MyClass, Y.Event.Target, ...);</code></li>
+ *   <li><code>function MyClass() { Y.Event.Target.apply(this, arguments); }
+ *       Y.mix(MyClass, Y.Event.Target, true, null, 1);</code></li>
+ * </ul>
+ *
+ * @class Y.Event.Target
+ * @constructor
+ * @param config {Object} (optional) configuration object for this instance
+ *                          (see <code>_initEvents</code> for details)
+ */
+function EventTarget() {
+    this._initEvents.apply(this, arguments);
+}
+
+/* FIXME:
+ * I don't like the manual step to build the event defs AND augmenting a class
+ * with Y.Event.Target.  Maybe Y.Event.Target.augment(classToAugment)? Some
+ * single step would be ideal.
+ */
 
 /**
- * <p>This API doc is out of date and while it contains useful info, isn't
- * authoritative and may be inaccurate.  YMMV.  I'll update the docs to reflect
- * the current state of the code at some point.</p>
- *
  * <p>Default lifecycle methods for any unknown event being referenced by the
  * API. This is the generic custom event behavior.</p>
  *
  * <p>To define specific events (only needed if they require special behavior),
- * you can describe them statically on the class in an <code>_events</code>
- * property.  Typically, you'll want to use the class's defaultEvent as the
- * prototype of any special events.  E.g.</p>
+ * you can describe them statically on the class in the <code>EVENTS</code>
+ * property.  Event behaviors will extend the <code>defaultEvent</code>
+ * specified in the <code>EVENTS</code> collection, falling back to the default
+ * generic custom event behavior.  Populate the <code>EVENTS</code> collection
+ * by capturing the return value of
+ * <code>Y.Event.configure({ (all event defs) })</code>, like this:</p>
  * <pre><code>
- * . MyClass._events = {
- * .     events: {
- * .         // define special behavior for a 'foo' event on all instances
- * .         foo: Y.Object(Y.Event.API.defaultEvent, {
- * .             init: function (host, subscription, callback) { ... }
- * .             destroy: function (host, type) { ... }
- * .             // all other behaviors inherited from the defaultEvent
- * .         })
- * .     }
- * . };
- * . Y.augment(MyClass, Y.Event.API, true);</code></pre>
+ * . MyClass.EVENTS = Y.Event.configure({
+ * .    foo: {
+ * .        // All other behaviors inherited from the defaultEvent
+ * .        setup: function (host, subscription, callback) { ... }
+ * .        teardown: function (host, subscription, callback) { ... }
+ * .    }
+ * . });
+ * . Y.augment(MyClass, Y.Event.Target);</code></pre>
  *
  * <p>If defining new default behaviors for a class, the default event
  * definition will need to implement the following methods:</p>
@@ -102,17 +124,35 @@ function pushByPath(o, path, subject) {
  *     <li><code>fire(host, type, *)</code></li>
  * </ul>
  *
- * <p>Return false from either to prevent the subscription or detach
- * respectively.</p>
+ * <p>Supply the defaultEvent in the class's EVENTS collection just as you
+ * would any other custom event.  You can cheat by extending the default custom
+ * event prototype.</p>
+ * <pre><code>
+ * . MyClass.EVENTS = Y.Event.configure({
+ * .    defaultEvent: new Y.CustomEvent({
+ * .        subscribe: function (host, sub) { ... },
+ * .        unsubscribe: function (host, sub) { ... },
+ * .        fire: function (host, type) { ... }
+ * .    }),
+ * .    foo: {
+ * .        // All other behaviors inherited from the defaultEvent
+ * .        setup: function (host, subscription, callback) { ... }
+ * .        teardown: function (host, subscription, callback) { ... }
+ * .    }
+ * . });
+ * . Y.augment(MyClass, Y.Event.Target);</code></pre>
+ *
+ * <p>Return false from <code>subscribe</code> or <code>unsubscribe</code> to
+ * prevent the subscription or detach respectively.</p>
  *
  * <p>The default implementation of these methods also supports the following
  * properties/methods:</p>
  * <ul>
- *     <li><code>init(host, subscription_kernel, args*)</code></li>
+ *     <li><code>setup(host, subscription_kernel, args*)</code></li>
  *     <li><code>on(host, subscription_kernel, args*)</code></li>
  *     <li><code>detach(host, subscription_kernel, args*)</code></li>
- *     <li><code>destroy(host, type)</code></li>
- *     <li><code>allowDups</code> (true|false) property</li>
+ *     <li><code>teardown(host, type)</code></li>
+ *     <li><code>preventDups</code> (true|false) property</li>
  *     <li><code>getSubs(host, type, category, phase)</code></li>
  *     <li><code>registerSub(host, sub)</code></li>
  *     <li><code>unregisterSub(host, sub)</code></li>
@@ -120,10 +160,10 @@ function pushByPath(o, path, subject) {
  * </ul>
  *
  * <p>Each method is called passing the event definition as 'this', and the
- * calling object as the first arg (except for <code>match</code>).  You
+ * host instance as the first arg.  You
  * can include any more or methods or properties on an event definition, but
  * the definition object should not manage state (e.g. fireOnce should not
- * update a property on the event definition) unless it that state applies to
+ * update a property on the event definition) unless that state applies to
  * all instances and derived event definitions.</p>
  *
  * <p>See the descriptions for the individual eventDef methods and
@@ -133,8 +173,29 @@ function pushByPath(o, path, subject) {
  * @type {Object}
  * @static
  */
-function CustomEvent() {}
+function CustomEvent(config) {
+    for (var k in config) {
+        if (config.hasOwnProperty(k)) {
+            this[k] = config[k];
+        }
+    }
+}
+
 CustomEvent.prototype = {
+    /**
+     * The class constructor for subscriptions to this event.  Unless the
+     * <code>subscribe</code> method has been overwritten with code that calls
+     * this constructor a different way, it will receive as arguments the array
+     * of arguments passed to <code>subscribe</code> and any data returned from
+     * the event's <code>processArgs</code> method (if defined).  E.g.
+     * <code> var sub = new this.Subscription(argArray, data);</code>
+     *
+     * @property Subscription
+     * @type {Function}
+     * @protected
+     */
+    Subscription: Subscription,
+
     /**
      * <p>Test the provided event type string and other args passed to
      * <code>on(type, ...)</code> or <code>after(type, ...)</code> to indicate
@@ -151,7 +212,7 @@ CustomEvent.prototype = {
      * <p>This is optional for any event, but can also be included in a default
      * event.  By default, a simple type => event mapping is used.</p>
      *
-     * @method eventDef.test
+     * @method test
      * @param host {Object} the instance from which on/after was called
      * @param type {String} the type string passed to <code>on(..)</code> or
      *                      <code>after(..)</code>
@@ -159,7 +220,6 @@ CustomEvent.prototype = {
      *                      callback function)
      * @return {boolean} true to indicate that this event should handle the
      *                      subscription
-     * @static
      * @protected
      */
 
@@ -171,42 +231,42 @@ CustomEvent.prototype = {
      * called from here include:</p>
      *
      * <ul>
-     *     <li><code>processArgs</code></li>
-     *     <li><code>generateSub</code></li>
-     *     <li><code>initialize</code></li>
-     *     <li><code>isSubscribed</code></li>
-     *     <li><code>on</code></li>
-     *     <li><code>registerSub</code></li>
+     *     <li><code>processArgs</code> if defined for this event</li>
+     *     <li><code>new this.Subscription</code> passing the processed
+     *          argument array and any data from <code>processArgs</code></li>
+     *     <li><code>initialize</code> if defined for this event</li>
+     *     <li><code>isSubscribed</code> if preventDups is truthy</li>
+     *     <li><code>on</code> if defined for this event</li>
+     *     <li><code>registerSub</code> unless any above step returns true to
+     *          abort the subscription</li>
      * </ul>
      *
      * <p>These methods (unless overwritten) expect the following arguments:</p>
      * <ul>
      *     <li>host (the event host)</li>
      *     <li>type (this event type)</li>
+     * FIXME: Get rid of category
      *     <li>category</li>
      *     <li>phase (e.g. "before")</li>
      *     <li>callback</li>
      * </ul>
      *
-     * @method eventDef.subscribe
+     * @method subscribe
      * @param args {Array} arguments listed above
      * @return {boolean} true to abort subscription, otherwise proceed
      * @static
      * @protected
      */
     subscribe: function (args) {
-        var extra = this.processArgs && this.processArgs(args),
-            sub   = this.generateSub.apply(this, args),
+        var details = this.processArgs && this.processArgs(args),
+            sub     = new this.Subscription(args, details),
             abort;
 
         args.splice(1, 0, sub);
-        if (extra) {
-            sub._extra = extra;
-        }
 
-        abort = this.initialize.apply(this, args);
+        abort = this.init && this.initialize(args);
 
-        if (!abort && !this.allowDups) {
+        if (!abort && !this.preventDups) {
             abort = this.isSubscribed.apply(this, args);
         }
 
@@ -221,32 +281,42 @@ CustomEvent.prototype = {
         }
     },
 
-    generateSub: function (host, type, category, phase, callback, thisObj) {
-        return new this.Subscriber(
-                            host,
-                            type,
-                            category,
-                            phase,
-                            callback,
-                            thisObj,
-                            toArray(arguments, 6, true));
-    },
+    /**
+     * Calls the event's <code>init</code> method if defined and records that
+     * the event was initialized unless <code>init</code> returns true to abort
+     * the subscription.
+     *
+     * @method initialize
+     * @param args {Array} The subscription args with Subscription inserted
+     * @return {Boolean} false to proceed with the subscription, true (or a
+     *              truthy value) to abort the subscription
+     * @protected
+     */
+    initialize: function (args) {
+        var host = args[0],
+            type = args[1].type,
+            evt = host._yuievt,
+            abort;
 
-    Subscriber: EventSubscriber,
-
-    initialize: function (host, sub) {
-        var abort;
-
-        if (this.init && !YObject.getValue(host._yuievt, ['init', sub.type])) {
+        if (!evt || !evt.init || !owns(evt.init, type)) {
             abort = this.init.apply(this, arguments);
             if (!abort) {
-                setByPath(host._yuievt, ['init', sub.type], abort);
+                setByPath(host, ['_yuievt', 'init', type], true);
             }
         }
 
         return abort;
     },
 
+    /**
+     * Checks to see if a duplicate subscription exists.
+     *
+     * @method isSubscribed
+     * @param host {Object}
+     * @param sub {Subscription} an instance of this.Subscription
+     * @return {Boolean} true (or a truthy value) to abort the subscription
+     * @protected
+     */
     isSubscribed: function (host, sub) {
         if (host._yuievt) {
             var subs  = host._yuievt.subs[sub.type],
@@ -271,84 +341,85 @@ CustomEvent.prototype = {
     },
 
     /**
-     * <p>Initial one-time setup for an event.  E.g. for DOM events, only
-     * one actual DOM subscription is made, the first time a subscription is
-     * requested.  A custom event is used to manage this and subsequent
-     * subscriptions in order to guarantee subscriber execution order.  Also
-     * see <code>eventDef.destroy</code>.</p>
+     * <p>Initial one-time setup for an event.  E.g. for a group of events
+     * that each relate to a shared set of DOM events, the init for each would
+     * set up those DOM event subscribers if not already subscribed.
+     * Also see <code>destroy</code>.</p>
      *
      * <p>Return true to abort the subscription (for example when routing a
      * subscription to another system or event).  To allow the subscription
      * to proceed, return false or simply omit an explicit return statement.</p>
      *
-     * @method eventDef.init
+     * @method init
      * @param host {Object} the instance from which on/after was called
      * @param sub {Object} the initial subscription object
+     * @param args* {Any} additional arguments passed to subscribe, including
+     *              the callback, thisObj, and additional arguments
      * @return {boolean} true to abort the subscription, otherwise proceed
-     * @static
      * @protected
      */
 
     /**
      * Adds a subscription to the host's internal store of subscriptions.
      *
-     * @method eventDef.registerSub
+     * @method registerSub
      * @param host {Object} the event host that will manage the subscription
      * @param sub {Object} subscription object
      * @static
      */
     registerSub: function (host, sub) {
-        pushByPath(host._yuievt.subs, [sub.type, sub.phase], sub);
+        pushByPath(host,['_yuievt','subs', sub.type, sub.phase], sub);
 
+        /*
         if (sub.category) {
             pushByPath(host._yuievt.cats,
                 [sub.category, sub.type, sub.phase], sub);
         }
+        */
     },
 
     /**
      * Removes a subscription to the host's internal store of subscriptions.
      *
-     * @method eventDef.unregisterSub
+     * @method unregisterSub
      * @param host {Object} the event host that manages subscriptions
      * @param sub {Object} subscription object
      * @static
      */
     unregisterSub: function (host, sub) {
-        if (host._yuievt) {
-            var subs = YObject.getValue(host._yuievt.subs, [sub.type, sub.phase]),
-                i;
+        var subs = YObject.getValue(host, ['_yuievt', 'subs', sub.type, sub.phase]),
+            i;
 
-            // TODO: this is inefficient
-            if (subs) {
-                i = arrayIndex(subs, sub);
-                if (i > -1) {
-                    subs.splice(i, 1);
+        // TODO: this is inefficient
+        if (subs) {
+            i = arrayIndex(subs, sub);
+            if (i > -1) {
+                subs.splice(i, 1);
 
-                    if (sub.category) {
-                        subs = YObject.getValue(host._yuievt.cats[sub.category],
-                                [sub.type, sub.phase]);
+                /*
+                if (sub.category) {
+                    subs = YObject.getValue(host._yuievt.cats[sub.category],
+                            [sub.type, sub.phase]);
 
-                        if (subs) {
-                            i = arrayIndex(subs, sub);
-                            if (i > -1) {
-                                subs.splice(i, 1);
-                            }
+                    if (subs) {
+                        i = arrayIndex(subs, sub);
+                        if (i > -1) {
+                            subs.splice(i, 1);
                         }
                     }
                 }
+                */
             }
         }
     },
 
     /**
      * Control whether duplicate subscriptions to this event should be allowed.
-     * If false, the API will use the event definition's
-     * <code>match</code> method to search the existing subscriptions for
-     * duplicates.  If one is found, the subscription will be aborted before
-     * reaching the <code>subscribe</code> method.
+     * If true, the <code>isSubscribed</code> method will be called to search
+     * the existing subscriptions for duplicates.  If one is found, the
+     * subscription will be aborted before reaching the <code>on</code> method.
      *
-     * @property eventDef.allowDups
+     * @property preventDups
      * @type {boolean}
      * @static
      * @protected
@@ -358,7 +429,7 @@ CustomEvent.prototype = {
      * <p>Executes subscribers for the "before" (aka "on") phase for all targets
      * in the bubble chain until propagation is stopped or the last target is
      * notified.  If not prevented and if the event has one, the default
-     * behavior is executed.  Then the executes subscribers for the "after"
+     * behavior is executed followed by the subscribers for the "after"
      * phase up the bubble chain.</p>
      *
      * <p>If the event is prevented and it has one, the <code>preventedFn</code>
@@ -368,6 +439,9 @@ CustomEvent.prototype = {
      * <p>Similarly, if the event propagation is stopped and it has one, the
      * <code>stoppedFn</code> method is executed.  Note, this will not prevent
      * the default behavior or the "after" subscribers from being executed.</p>
+     *
+     * <p>Other publish configurations affect the notification behavior as
+     * well, such as <code>async</code> and <code>queuable</code>.</p>
      *
      * @method eventDef.fire
      * @param host {Object} the instance from which fire was called
@@ -731,16 +805,18 @@ CustomEvent.prototype = {
      */
 };
 
-function EventSubscriber(host, type, cat, phase, callback, thisObj, payload) {
-    this.host     = host;
-    this.type     = type;
-    this.category = cat;
-    this.phase    = phase;
-    this.callback = callback;
-    this.thisObj  = thisObj || host;
-    this.payload  = payload;
+function Subscription(args, details) {
+    this.host     = args[0];
+    this.type     = args[1];
+    //FIXME: get rid of category
+    //this.category = cat;
+    this.phase    = args[2];
+    this.callback = args[3];
+    this.thisObj  = args[4] || args[0];
+    this.payload  = args.slice(5);
+    this.details  = details;
 }
-EventSubscriber.prototype = {
+Subscription.prototype = {
     notify: function () {
         var args = arguments;
         
