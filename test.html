@@ -6,9 +6,9 @@
 <body class="yui3-skin-sam">
 <p id="x">Treasure</p>
 
-<script src="/dev/lsmith/yui3/build/yui/yui.js"></script>
-<script src="/dev/lsmith/yui3/sandbox/event/eventx/event.js"></script>
-<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-dom.js"></script>
+<script src="http://yui.yahooapis.com/3.8.1/build/yui/yui.js"></script>
+<script src="event.js"></script>
+<!--script src="/dev/lsmith/yui3/sandbox/event/eventx/event-dom.js"></script>
 <script>
 YUI.add('test-node', function (Y) {
     Y.Node = function (el) {
@@ -16,17 +16,20 @@ YUI.add('test-node', function (Y) {
     }
 });
 </script>
-<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-node.js"></script>
+<script src="/dev/lsmith/yui3/sandbox/event/eventx/event-node.js"></script-->
 <script>
 YUI({
     filter: 'raw'
-}).use('oop','test-node', 'eventx-node', function (Y) {
+//}).use('oop','test-node', 'eventx-node', function (Y) {
+}).use('eventx', function (Y) {
 
-function C() {
-    this.name = "I'm a C!";
+function C(name) {
+    this.name = name;
+    Y.EventTarget.call(this);
 }
-Y.augment(C, Y.EventTarget, true);
-Y.EventTarget.initEvents(C, {
+Y.extend(C, Y.EventTarget);
+Y.EventTarget.configure(C, {
+    foo: { bubbles: false },
     bar: {
         defaultFn: function () {
             console.log("bar event behavior");
@@ -43,10 +46,10 @@ Y.EventTarget.initEvents(C, {
     }
 });
 
-var c = new C(),
-    bigC = new C(),
-    ultraC = new C(),
-    lateralC = new C();
+var c = new C("Little C"),
+    bigC = new C("Big C"),
+    ultraC = new C("Ultra C"),
+    lateralC = new C("Lateral C");
 
 c.addTarget(bigC); // Should get event second
 c.addTarget(lateralC); // Should get event third
@@ -54,68 +57,84 @@ bigC.addTarget(ultraC); // Should get event fourth
 bigC.addTarget(lateralC); // Should NOT get event a second time
 ultraC.addTarget(lateralC); // Should NOT get event a second time
 
+/*
 c.on("test", function (e) {
-    console.log("Should be #1 - before: " + this.name);
+    console.log("Should be #1 - before: " + this.name, e.currentTarget);
 });
 
 c.after("test", function (e) {
-    console.log("Should be last: " + e.get('data'));
+    console.log("Should be last: " + e.get('data'), e.currentTarget);
 });
 
-bigC.on("test", function () {
-    console.log("Should be #5, then #1 after c.detach() - from second bubble target in c's path (bigC)");
+bigC.on("test", function (e) {
+    console.log("Should be #5, then #1 after c.detach() - from second bubble target in c's path (bigC)", e.currentTarget);
 });
 
-ultraC.on("test", function () {
-    console.log("Should be #7, then #3 after c.detach() - from first bubble target in bigC's path (ultraC)");
+ultraC.on("test", function (e) {
+    console.log("Should be #7, then #3 after c.detach() - from first bubble target in bigC's path (ultraC)", e.currentTarget);
 });
 
-c.on("foo|test", function (e) {
-    console.log("Should be #2 - before: " + this.name);
+c.on("test", function (e) {
+    console.log("Should be #2 - before: " + this.name, e.currentTarget);
 }, { name: "I'm NOT a C." });
 
-c.subscribe("test","before", function (e, nickname) {
-    console.log("Should be #3 - before: " + this.name + ", but call me " + nickname);
+c.subscribe("test", "before", function (e, nickname) {
+    console.log("Should be #3 - before: " + this.name + ", but call me " + nickname, e.currentTarget);
 }, null, "Tito");
 
+*/
 c.on({
-    test: function (e) { console.log("Should be #4 - before"); },
-    bar: function (e) { console.log("bar 1"); }
+    test: function (e) { console.log("Should be #4 - before", e.currentTarget); },
+    foo: function (e) { console.log("Foo from c", e); },
+    bar: function (e) { console.log("bar 1", e); }
 });
 
+/*
 c.subscribe("test","middle", function (e) {
-    console.log("Should NOT be logged.  'middle' is not a known phase.");
+    console.log("Should NOT be logged.  'middle' is not a known phase.", e.currentTarget);
 });
 
-lateralC.on("test", function () {
-    console.log("Should be #6, then #2 after c.detach() - from second bubble target in c's path (lateralC)");
+lateralC.on("test", function (e) {
+    console.log("Should be #6, then #2 after c.detach() - from second bubble target in c's path (lateralC)", e.currentTarget);
+});
+*/
+
+c.after("bar", function (e) {
+    console.log("bar - after", e);
 });
 
-c.on("onetime", function () {
-    console.log("Fire once event - before");
+c.on("onetime", function (e) {
+    console.log("Fire once event - before", e);
 });
-c.after("onetime", function () {
-    console.log("Fire once event - after");
+c.after("onetime", function (e) {
+    console.log("Fire once event - after", e);
 });
 
-c.fire("test", { data: "This is data from fire" });
+bigC.on('foo', function (e) {
+    console.log("This should not be logged. foo doesn't bubble", e);
+});
+
+//c.fire("test", { data: "This is data from fire" });
+c.fire("foo");
 c.fire("bar");
 c.fire("onetime");
 
 c.detach();
+
 c.on("bar", function (e) {
     e.preventDefault();
 });
-c.on("onetime", function () {
+c.on("onetime", function (e) {
     console.log("Fire once event - subscribe 'before' after fired");
 });
-c.after("onetime", function () {
+c.after("onetime", function (e) {
     console.log("Fire once event - subscribe 'after' after fired");
 });
 
-c.fire("test", { data: "hopefully this does not show up" });
+//c.fire("test", { data: "hopefully this does not show up" });
 c.fire("bar");
 
+/*
 var node = new Y.Node(document.getElementById('x'));
 function go(e) {
     console.log("Treasure node clicked!");
@@ -123,6 +142,7 @@ function go(e) {
 }
 node.on("click", go);
 node.on("click", go); // duplicates ignored
+*/
 
 });
 </script>
