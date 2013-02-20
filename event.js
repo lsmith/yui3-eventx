@@ -1,336 +1,234 @@
+YUI.add('eventx', function (Y) {
 /**
  * Alternate event API augmentation class.
  *
  * @module eventx-core
  */
-YUI.add('eventx-core', function (Y) {
 
 // TODO:
-// - Extract the bubbleTo and bubbling support to a submodule?
-// - Implement appliesTo? Submodule?
-// - Implement queuable.
-// - Implement broadcast? (_evt level for all events?)
+// - Implement broadcast?
 // - Add support for internal/locked subscriptions (can detach internally only)
-var YObject    = Y.Object,
-    YArray     = Y.Array,
-    YLang      = Y.Lang,
-    each       = YArray.each,
-    isObject   = YLang.isObject,
-    isString   = YLang.isString,
-    proto      = YObject,
-    toArray    = YArray,
-    arrayIndex = YArray.indexOf,
-    owns       = YObject.owns;
+var isObject   = Y.Lang.isObject,
+    isArray    = Y.Lang.isArray,
+    proto      = Y.Object,
+    toArray    = Y.Array,
+    arrayIndex = toArray.indexOf, // Y.Array.indexOf
+    values     = proto.values,    // Y.Object.values
+    push       = Array.prototype.push,
+    slice      = Array.prototype.slice,
+
+    STRING     = 'string',
+    BEFORE     = 'before',
+    AFTER      = 'after',
+    BASE       = '@BASE',
+    DEFAULT    = '@DEFAULT';
 
 
 /**
- * Assigns a property:value to an object at an arbitrary depth indicated in the
- * <code>path</code> parameter.  If any point on the path doesn't exist, it is
- * created.
- *
- * E.g. <code>var x = {}; setByPath(x, ['foo','bar'], 1)</code>
- * would result in <code>x</code> structured like
- * <code>{ foo: { bar: 1 } }</code>
- *
- * @method setByPath
- * @param o {Object} object root of the path
- * @param path {Array} property names identifying the nesting location
- * @param subject {any} the item to push to the array
- * @private
- */
-function setByPath(o, path, val) {
-    for (var i = 0, len = path.length - 1; i < len; ++i) {
-        o = o[path[i]] || (o[path[i]] = {});
+Collection of behaviors for subscribing to and firing a named custom event.
+This class is meant to be a scaffolding for customizations. The default
+method implementations support the following customizations:
+
+* config.defaultFn(e) - Behavior executed after `on()` subscribers, before
+    `after()` subscribers, and only if `e.preventDefault()` isn't called.
+* config.preventable (boolean) - If `e.preventDefault()` does anything.
+* config.preventedFn(e) - Called if `e.preventDefault()` is called.
+* config.stoppedFn(e) - Called if `e.stopPropagation()` is called.
+* config.bubbles (boolean) - Allow or disallow bubbling for this event. Default
+    is `true`.
+* config.allowDups (boolean) - Allow or disallow duplicate subscriptions.
+    Default is `true`.
+* config.on(target, subscription) - Execute this code when subscriptions are
+    made to the event. Return truthy value to abort the subscription.
+* config.detach(target, subscription) - Likewise when subscriptions are removed
+* config.parseSignature(subArgs) - Support custom subscription signatures. Data
+    returned from this function will be added to the subscription object.
+* config.publish(target) - Execute this code when the event is published.
+* config.Event(type, target, payload) - Class used to create the event objects
+    that are passed to subscribers.
+* config.Subscription(target, args, phase, details) - Class used to encapsulate
+    a subscription to the event.
+
+Additional properties and methods can be added to the event for reference from
+any of the configured methods, or from overrides to the methods defined on the
+CustomEvent prototype. All properties of the _config_ object are mixed onto
+the event.
+
+The primary use case for custom event creation is through static definition
+on a class in the `EventTarget.configure()` call. More events can be added to
+a class or specifically to a class instance using either the class's static or
+instance `publish()` method.
+
+```
+Y.EventTarget.configure(MyClass, { map of events to configs }, defaultEvent);
+
+MyClass.publish('eventX', { bubbles: false });
+
+instance.publish('eventY', { preventable: false });
+```
+
+Events published on a class or instance derive their behavior from a default
+event defined during `configure()`. The default event is a custom event whose
+configured behaviors are used when `on()` or `fire()` are called for events
+that aren't explicitly published for the class or instance. To create an event
+that derives from a different set of event behaviors, pass the desired
+prototype event as _inheritsFrom_.
+
+@class CustomEvent
+@param {String} type The name of the event
+@param {Object} [config] overrides and additional properties for the event
+@param {CustomEvent} [inheritsFrom=CustomEvent.prototype] prototype for this
+                        event
+**/
+function CustomEvent(type, config, inheritsFrom) {
+    var instance, key;
+    
+    if (!inheritsFrom && !(this instanceof CustomEvent)) {
+        inheritsFrom = CustomEvent.prototype;
     }
 
-    o[i] = val;
-}
+    instance = inheritsFrom ? proto(inheritsFrom) : this;
 
-/**
- * Pushes an object onto an array located at the path identified by following
- * the property name strings in the <code>path</code> parameter.  If any
- * point on the path doesn't exist, it is created.  The last point in the path
- * should be an array.
- *
- * E.g. <code>var x = {}; pushToPath(x, ['foo','bar'], 1)</code>
- * would result in <code>x</code> structured like
- * <code>{ foo: { bar: [ 1 ] } }</code>
- *
- * @method pushToPath
- * @param o {Object} object root of the path
- * @param path {Array} property names identifying the nesting location
- * @param subject {any} the item to push to the array
- * @private
- */
-function pushByPath(o, path, subject) {
-    for (var i = 0, len = path.length - 1; i < len; ++i) {
-        o = o[path[i]] || (o[path[i]] = {});
-    }
+    /**
+    Prototype for this object, before any overrides. Use this to call methods
+    overridden methods from your custom overrides rather than reimplementing
+    the overridden logic.
 
-    (o[path[i]] || (o[path[i]] = [])).push(subject);
-}
+    ```
+    target.publish('foo', {
+        subscribe: function () {
+            console.log('Subscribing to foo');
+            return this._super.subscribe.apply(this, arguments);
+        }
+    });
+    ```
 
-/**
- * Augmentation class to add event related API methods to instances of the host
- * class.  Extend the class by any of the following methods:
- * <ul>
- *   <li><code>Y.augment(MyClass, Y.Event.Target, true);</code></li>
- *   <li><code>Y.extend(MyClass, Y.Event.Target, ...);</code></li>
- *   <li><code>function MyClass() { Y.Event.Target.apply(this, arguments); }
- *       Y.mix(MyClass, Y.Event.Target, true, null, 1);</code></li>
- * </ul>
- *
- * @class Y.Event.Target
- * @constructor
- * @param config {Object} (optional) configuration object for this instance
- *                          (see <code>_initEvents</code> for details)
- */
-function EventTarget() {
-    this._initEvents.apply(this, arguments);
-}
+    This is a public property despite the leading underscore. 'super' is a
+    reserved word, and requiring this['super'] is silly.
 
-/* FIXME:
- * I don't like the manual step to build the event defs AND augmenting a class
- * with Y.Event.Target.  Maybe Y.Event.Target.augment(classToAugment)? Some
- * single step would be ideal.
- */
+    @property _super
+    @type {CustomEvent}
+    @default `Y.CustomEvent.prototype`
+    **/
+    instance._super = inheritsFrom || CustomEvent.protototype;
 
-/**
- * <p>Default lifecycle methods for any unknown event being referenced by the
- * API. This is the generic custom event behavior.</p>
- *
- * <p>To define specific events (only needed if they require special behavior),
- * you can describe them statically on the class in the <code>EVENTS</code>
- * property.  Event behaviors will extend the <code>defaultEvent</code>
- * specified in the <code>EVENTS</code> collection, falling back to the default
- * generic custom event behavior.  Populate the <code>EVENTS</code> collection
- * by capturing the return value of
- * <code>Y.Event.configure({ (all event defs) })</code>, like this:</p>
- * <pre><code>
- * . MyClass.EVENTS = Y.Event.configure({
- * .    foo: {
- * .        // All other behaviors inherited from the defaultEvent
- * .        setup: function (host, subscription, callback) { ... }
- * .        teardown: function (host, subscription, callback) { ... }
- * .    }
- * . });
- * . Y.augment(MyClass, Y.Event.Target);</code></pre>
- *
- * <p>If defining new default behaviors for a class, the default event
- * definition will need to implement the following methods:</p>
- * <ul>
- *     <li><code>subscribe(host, subscription_kernel, args*)</code></li>
- *     <li><code>unsubscribe(host, subscription, args*)</code></li>
- *     <li><code>fire(host, type, *)</code></li>
- * </ul>
- *
- * <p>Supply the defaultEvent in the class's EVENTS collection just as you
- * would any other custom event.  You can cheat by extending the default custom
- * event prototype.</p>
- * <pre><code>
- * . MyClass.EVENTS = Y.Event.configure({
- * .    defaultEvent: new Y.CustomEvent({
- * .        subscribe: function (host, sub) { ... },
- * .        unsubscribe: function (host, sub) { ... },
- * .        fire: function (host, type) { ... }
- * .    }),
- * .    foo: {
- * .        // All other behaviors inherited from the defaultEvent
- * .        setup: function (host, subscription, callback) { ... }
- * .        teardown: function (host, subscription, callback) { ... }
- * .    }
- * . });
- * . Y.augment(MyClass, Y.Event.Target);</code></pre>
- *
- * <p>Return false from <code>subscribe</code> or <code>unsubscribe</code> to
- * prevent the subscription or detach respectively.</p>
- *
- * <p>The default implementation of these methods also supports the following
- * properties/methods:</p>
- * <ul>
- *     <li><code>setup(host, subscription_kernel, args*)</code></li>
- *     <li><code>on(host, subscription_kernel, args*)</code></li>
- *     <li><code>detach(host, subscription_kernel, args*)</code></li>
- *     <li><code>teardown(host, type)</code></li>
- *     <li><code>preventDups</code> (true|false) property</li>
- *     <li><code>getSubs(host, type, category, phase)</code></li>
- *     <li><code>registerSub(host, sub)</code></li>
- *     <li><code>unregisterSub(host, sub)</code></li>
- *     <li><code>test(type, args*)</code></li>
- * </ul>
- *
- * <p>Each method is called passing the event definition as 'this', and the
- * host instance as the first arg.  You
- * can include any more or methods or properties on an event definition, but
- * the definition object should not manage state (e.g. fireOnce should not
- * update a property on the event definition) unless that state applies to
- * all instances and derived event definitions.</p>
- *
- * <p>See the descriptions for the individual eventDef methods and
- * properties.</p>
- * 
- * @class CustomEvent
- * @type {Object}
- * @static
- */
-function CustomEvent(config) {
-    for (var k in config) {
-        if (config.hasOwnProperty(k)) {
-            this[k] = config[k];
+    // Override instance properties and methods from input config
+    if (config) {
+        for (key in config) {
+            if (config.hasOwnProperty(key)) {
+                instance[key] = config[key];
+            }
         }
     }
+
+    // type can't be overridden in config
+    instance.type = type;
+
+    // Might return instance of another prototype
+    return instance;
 }
 
 CustomEvent.prototype = {
     /**
-     * The class constructor for subscriptions to this event.  Unless the
-     * <code>subscribe</code> method has been overwritten with code that calls
-     * this constructor a different way, it will receive as arguments the array
-     * of arguments passed to <code>subscribe</code> and any data returned from
-     * the event's <code>processArgs</code> method (if defined).  E.g.
-     * <code> var sub = new this.Subscription(argArray, data);</code>
-     *
-     * @property Subscription
-     * @type {Function}
-     * @protected
-     */
+    The class constructor for subscriptions to this event.  Unless the
+    `subscribe` method has been overwritten with code that calls
+    this constructor a different way, it will receive the following arguments:
+
+    * `target` - the EventTarget that called `on()` or `after()`
+    * `args` - the subscription arguments (type, callback, thisObj, args)
+    * `phase` - 'before' or 'after'
+    * `details` - returned data from `parseSignature()` if the event has it
+
+    @property Subscription
+    @type {Function}
+    **/
     Subscription: Subscription,
 
     /**
-     * <p>Test the provided event type string and other args passed to
-     * <code>on(type, ...)</code> or <code>after(type, ...)</code> to indicate
-     * that this event definition should handle the subscription.  By default,
-     * event mapping is a direct type string => event definition.  This allows
-     * for more generic type strings that can be used to trigger specific
-     * behavior in the <code>init</code> or <code>subscribe</code> methods.
-     * An example would be a regex based test that matched
-     * <code>on("key(shift+enter)", ...)</code>.</p>
-     *
-     * <p>Return true to indicate that this event should handle the
-     * subscription.</p>
-     *
-     * <p>This is optional for any event, but can also be included in a default
-     * event.  By default, a simple type => event mapping is used.</p>
-     *
-     * @method test
-     * @param host {Object} the instance from which on/after was called
-     * @param type {String} the type string passed to <code>on(..)</code> or
-     *                      <code>after(..)</code>
-     * @param args* {any} additional arguments after type and phase (e.g.
-     *                      callback function)
-     * @return {boolean} true to indicate that this event should handle the
-     *                      subscription
-     * @protected
-     */
+    Coordinates the various steps involved in subscribing to this event.
 
-    /**
-     * Coordinates the various steps involved in subscribing to this event.
-     * <p>Typically defined events will not need to override this method.  The
-     * arguments array received as the parameter is passed to the
-     * <code>processArgs</code> method for any adjustments needed.  The methods
-     * called from here include:</p>
-     *
-     * <ul>
-     *     <li><code>processArgs</code> if defined for this event</li>
-     *     <li><code>new this.Subscription</code> passing the processed
-     *          argument array and any data from <code>processArgs</code></li>
-     *     <li><code>initialize</code> if defined for this event</li>
-     *     <li><code>isSubscribed</code> if preventDups is truthy</li>
-     *     <li><code>on</code> if defined for this event</li>
-     *     <li><code>registerSub</code> unless any above step returns true to
-     *          abort the subscription</li>
-     * </ul>
-     *
-     * <p>These methods (unless overwritten) expect the following arguments:</p>
-     * <ul>
-     *     <li>host (the event host)</li>
-     *     <li>type (this event type)</li>
-     * FIXME: Get rid of category
-     *     <li>category</li>
-     *     <li>phase (e.g. "before")</li>
-     *     <li>callback</li>
-     * </ul>
-     *
-     * @method subscribe
-     * @param args {Array} arguments listed above
-     * @return {boolean} true to abort subscription, otherwise proceed
-     * @static
-     * @protected
-     */
-    subscribe: function (args) {
-        var details = this.processArgs && this.processArgs(args),
-            sub     = new this.Subscription(args, details),
-            abort;
-
-        args.splice(1, 0, sub);
-
-        abort = this.init && this.initialize(args);
-
-        if (!abort && !this.preventDups) {
-            abort = this.isSubscribed.apply(this, args);
-        }
+    Typically defined events will not need to override this method.  The
+    arguments array received as the third parameter is passed to the
+    `parseSignature` method for any adjustments needed.  The methods
+    called from here include:
+    
+    * `parseSignature(args)` if defined for this event
+    * `new this.Subscription(target, args, phase, extras)` passing the
+       processed argument array and any data from `parseSignature`
+    * `isSubscribed(target, sub)` if `preventDups` is truthy
+    * `on(target, sub)` if `on` is defined for this event
+    
+    The default signature of `args` is:
+    * type (string)
+    * callback (function)
+    * thisObj (optional `this` override for callback)
+    * ...argN (optional additional bound subscription args to pass to callback)
+    
+    @method subscribe
+    @param {EventTarget} target The instance to own the subscription
+    @param {String} phase The subscription phase ("before" or "after")
+    @param {Array} args Arguments listed above
+    @return {Subscription}
+    **/
+    subscribe: function (target, phase, args) {
+        var details = this.parseSignature && this.parseSignature(args),
+            sub     = new this.Subscription(target, args, phase, details),
+            abort   = this.preventDups    && this.isSubscribed(target, sub),
+            subs;
 
         if (!abort) {
             if (this.on) {
-                abort = this.on.apply(this, args);
+                abort = this.on(target, sub);
             }
 
+            // Register the subscription
             if (!abort) {
-                this.registerSub.apply(this, args);
-            }
-        }
-    },
+                // This was inlined from previous iteration as
+                // registerSub(target, sub), which then called abstracted
+                // function pushByPath(target._yuievt, ...) to avoid the extra
+                // function hops. It might be useful to break this back out to
+                // registerSub(), but for now, start simple.
+                subs = target._yuievt.subs;
 
-    /**
-     * Calls the event's <code>init</code> method if defined and records that
-     * the event was initialized unless <code>init</code> returns true to abort
-     * the subscription.
-     *
-     * @method initialize
-     * @param args {Array} The subscription args with Subscription inserted
-     * @return {Boolean} false to proceed with the subscription, true (or a
-     *              truthy value) to abort the subscription
-     * @protected
-     */
-    initialize: function (args) {
-        var host = args[0],
-            type = args[1].type,
-            evt = host._yuievt,
-            abort;
+                // target._yuievt.subs.foo
+                subs = subs[sub.type] || (subs[sub.type] = {});
 
-        if (!evt || !evt.init || !owns(evt.init, type)) {
-            abort = this.init.apply(this, arguments);
-            if (!abort) {
-                setByPath(host, ['_yuievt', 'init', type], true);
+                // target._yuievt.subs.foo.before
+                subs = subs[sub.phase] || (subs[sub.phase] = []);
+
+                // target._yuievt.subs.foo.before.push(sub)
+                subs.push(sub);
             }
         }
 
-        return abort;
+        // TODO: worth it? target.on() is chainable, so this isn't made easily
+        // available.
+        return abort ? null : sub;
     },
 
     /**
-     * Checks to see if a duplicate subscription exists.
-     *
-     * @method isSubscribed
-     * @param host {Object}
-     * @param sub {Subscription} an instance of this.Subscription
-     * @return {Boolean} true (or a truthy value) to abort the subscription
-     * @protected
-     */
-    isSubscribed: function (host, sub) {
-        if (host._yuievt) {
-            var subs  = host._yuievt.subs[sub.type],
-                type  = sub.type,
-                phase = sub.phase,
+    Checks to see if a duplicate subscription exists.
+    
+    @method isSubscribed
+    @param target {Object}
+    @param sub {Subscription} an instance of this.Subscription
+    @return {Boolean} true (or a truthy value) to abort the subscription
+    **/
+    isSubscribed: function (target, sub) {
+        if (target._yuievt) {
+            var type     = sub.type,
+                subs     = target._yuievt.subs[type],
+                phase    = sub.phase,
+                callback = sub.callback,
                 cmp, i;
 
             if (subs && subs[phase]) {
                 subs = subs[phase];
                 for (i = subs.length - 1; i >= 0; --i) {
                     cmp = subs[i];
-                    if (cmp.type     === type &&
-                        cmp.phase    === phase &&
-                        cmp.callback === sub.callback) {
+                    if (cmp.type     === type
+                    &&  cmp.phase    === phase
+                    &&  cmp.callback === callback) {
                         return true;
                     }
                 }
@@ -341,147 +239,83 @@ CustomEvent.prototype = {
     },
 
     /**
-     * <p>Initial one-time setup for an event.  E.g. for a group of events
-     * that each relate to a shared set of DOM events, the init for each would
-     * set up those DOM event subscribers if not already subscribed.
-     * Also see <code>destroy</code>.</p>
-     *
-     * <p>Return true to abort the subscription (for example when routing a
-     * subscription to another system or event).  To allow the subscription
-     * to proceed, return false or simply omit an explicit return statement.</p>
-     *
-     * @method init
-     * @param host {Object} the instance from which on/after was called
-     * @param sub {Object} the initial subscription object
-     * @param args* {Any} additional arguments passed to subscribe, including
-     *              the callback, thisObj, and additional arguments
-     * @return {boolean} true to abort the subscription, otherwise proceed
-     * @protected
-     */
+    Control whether duplicate subscriptions to this event should be allowed.
+    If true, the `isSubscribed` method will be called to search
+    the existing subscriptions for duplicates.  If one is found, the
+    subscription will be aborted.
+    
+    @property preventDups
+    @type {Boolean}
+    @default `undefined` (falsey)
+    **/
 
     /**
-     * Adds a subscription to the host's internal store of subscriptions.
-     *
-     * @method registerSub
-     * @param host {Object} the event host that will manage the subscription
-     * @param sub {Object} subscription object
-     * @static
-     */
-    registerSub: function (host, sub) {
-        pushByPath(host,['_yuievt','subs', sub.type, sub.phase], sub);
+    Executes subscribers for the "before" (aka "on") phase for all targets
+    in the bubble chain until propagation is stopped or the last target is
+    notified.  If not prevented and if the event has one, the default
+    behavior is executed followed by the subscribers for the "after"
+    phase up the bubble chain.
+    
+    If the event is prevented and it has one, the `preventedFn`
+    method is executed.  "after" phase subscribers are not executed if the
+    behavior is prevented.
+    
+    Similarly, if the event propagation is stopped and it has one, the
+    `stoppedFn` method is executed.  Note, this will not prevent
+    the default behavior or the "after" subscribers from being executed.
+    
+    @method fire
+    @param {EventTarget} target The instance from which fire was called
+    @param {String} type The event type to dispatch
+    @param args* {any} additional args passed `fire(type, _here_...)`
+    **/
+    fire: function (target, type) {
+        var path    = this.bubbles && target._yuievt.bubblePath.length ?
+                        this.resolveBubblePath(target) :
+                        [target],
+            hasSubs = this.hasSubs(path, type),
+            event, payload;
 
-        /*
-        if (sub.category) {
-            pushByPath(host._yuievt.cats,
-                [sub.category, sub.type, sub.phase], sub);
+        if (this.defaultFn || hasSubs || (this.fireOnce && !this._firedWith)) {
+            if (arguments.length > 2) {
+                payload = toArray(arguments, 2, true);
+            }
+
+            event = new this.Event(type, target, payload);
         }
-        */
-    },
 
-    /**
-     * Removes a subscription to the host's internal store of subscriptions.
-     *
-     * @method unregisterSub
-     * @param host {Object} the event host that manages subscriptions
-     * @param sub {Object} subscription object
-     * @static
-     */
-    unregisterSub: function (host, sub) {
-        var subs = YObject.getValue(host, ['_yuievt', 'subs', sub.type, sub.phase]),
-            i;
+        if (hasSubs) {
+            // on() subscribers
+            this.notify(path, event, BEFORE);
 
-        // TODO: this is inefficient
-        if (subs) {
-            i = arrayIndex(subs, sub);
-            if (i > -1) {
-                subs.splice(i, 1);
+            // default/stop/prevent behavior
+            if (event._stopped && this.stoppedFn) {
+                this.stoppedFn.call(target, event);
+            }
 
-                /*
-                if (sub.category) {
-                    subs = YObject.getValue(host._yuievt.cats[sub.category],
-                            [sub.type, sub.phase]);
-
-                    if (subs) {
-                        i = arrayIndex(subs, sub);
-                        if (i > -1) {
-                            subs.splice(i, 1);
-                        }
-                    }
+            if (event._prevented) {
+                this.preventedFn && this.preventedFn.call(target, event);
+            } else {
+                if (this.defaultFn) {
+                    this.defaultFn.call(target, event);
                 }
-                */
+
+                // after() subscribers. defaultFn can stopImmediatePropagation()
+                // to abort notifying them.
+                if (event._stopped !== 2) {
+                    // TODO: Reverse path? I'm going with "no" as a default.
+                    this.notify(path, event, AFTER);
+                }
             }
-        }
-    },
-
-    /**
-     * Control whether duplicate subscriptions to this event should be allowed.
-     * If true, the <code>isSubscribed</code> method will be called to search
-     * the existing subscriptions for duplicates.  If one is found, the
-     * subscription will be aborted before reaching the <code>on</code> method.
-     *
-     * @property preventDups
-     * @type {boolean}
-     * @static
-     * @protected
-     */
-
-    /**
-     * <p>Executes subscribers for the "before" (aka "on") phase for all targets
-     * in the bubble chain until propagation is stopped or the last target is
-     * notified.  If not prevented and if the event has one, the default
-     * behavior is executed followed by the subscribers for the "after"
-     * phase up the bubble chain.</p>
-     *
-     * <p>If the event is prevented and it has one, the <code>preventedFn</code>
-     * method is executed.  "after" phase subscribers are not executed if the
-     * behavior is prevented.</p>
-     *
-     * <p>Similarly, if the event propagation is stopped and it has one, the
-     * <code>stoppedFn</code> method is executed.  Note, this will not prevent
-     * the default behavior or the "after" subscribers from being executed.</p>
-     *
-     * <p>Other publish configurations affect the notification behavior as
-     * well, such as <code>async</code> and <code>queuable</code>.</p>
-     *
-     * @method eventDef.fire
-     * @param host {Object} the instance from which fire was called
-     * @param type {String} the event type to dispatch
-     * @param args* {any} additional args passed <code>fire(type,
-     *              <em>_here_...</em>)</code>
-     * @static
-     * @protected
-     */
-    fire: function (host, type) {
-        var path  = this.resolveBubblePath(host),
-            event = this.generateEvent.apply(this, arguments);
-            
-        // on() subscribers
-        this.notify(path, event, "before");
-
-        // default/stop/prevent behavior
-        if (event._stop && this.stoppedFn) {
-            this.stoppedFn.call(host, event);
-        }
-
-        if (this.preventable && event._prevent) {
-            if (this.preventedFn) {
-                this.preventedFn.call(host, event);
-            }
-        } else {
-            if (this.defaultFn) {
-                this.defaultFn.call(host, event);
-            }
-
-            // after() subscribers
-            this.notify(path, event, "after");
+        } else if (this.defaultFn) {
+            this.defaultFn.call(target, event);
         }
 
         // Reroute subscribe to immediate for fireOnce configurations.  This
         // creates a derived event definition on the instance to prevent
-        // modifying a shared event definition.  See <code>immediate</code>.
+        // modifying a shared event definition.  See `immediate`.
         if (this.fireOnce && !this._firedWith) {
-            host.publish({
-                type      : type,
+            target.publish(type, {
                 subscribe : this.immediate,
                 // cache the event it was initially fired with
                 _firedWith: event
@@ -490,978 +324,1024 @@ CustomEvent.prototype = {
     },
 
     /**
-     * <p>Flattens the bubble path for a given root instance.  Flattens using a
-     * breadth-first algo, so given the following bubble structure:</p>
-     * <pre>
-     * . (D)  (E)   (D)  (F)
-     * .    \  |     |  /
-     * .     (B)     (C)       bubble up to
-     * .        \   /
-     * .         (A)           bubbles up to</pre>
-     *
-     * <p>The resulting bubble path would be [A, B, C, D, E, F], and not
-     * [A, B, D, E, C, F] (depth-first).  Also note duplicate targets are
-     * ignored.  The first appearance in the bubble path wins.</p>
-     *
-     * @method resolveBubblePath
-     * @param root {Object} the origin of the event to bubble (A in the diagram)
-     * @return {Array} the ordered list of target instances
-     * @static
-     * @protected
-     */
-    resolveBubblePath: function (root) {
-        var path  = [root],
-            known = [],
-            i, j, target, clz;
+    Checks for subscribers along the bubble path if necessary.
 
-        if (this.bubbles) {
-            // Add to the end of the path as we iterate.  This creates a bubble
-            // path where A's immediate bubble targets are all notified, then
-            // each of their respective bubble targets are notified and so on.
-            // (breadth first)
-            for (i = 0; i < path.length; ++i) {
-                target = path[i];
-
-                // protect against infinite loops
-                if (target._yuievt && arrayIndex(known, target) === -1) {
-                    clz = target.constructor;
-                    known.push(target);
-
-                    if (target._yuievt && target._yuievt.bubblePath) {
-                        path.push.apply(path, target._yuievt.bubblePath);
-                    }
-
-                    if (clz._yuievt && clz._yuievt.bubblePath) {
-                        path.push.apply(path, clz._yuievt.bubblePath);
-                    }
-                }
-            };
-
-            // remove non-unique path entries.
-            for (i = 0; i < path.length; ++i) {
-                target = path[i];
-                for (j = i + 1; j < path.length; ++j) {
-                    if (path[j] === target) {
-                        path.splice(j--, 1);
-                    }
-                }
+    @method hasSubs
+    @param {EventTarget} path The bubble path
+    @param {String} type The event type to collect subscriptions for
+    @return {Boolean}
+    **/
+    hasSubs: function (path, type) {
+        // TODO: This returns a false positive if all subscribers have been
+        // detached because detach() only splices from the phase array. I'm
+        // guessing this is an edge case and not worth the code overhead to
+        // handle for now.
+        for (var i = 0, len = path.length; i < len; ++i) {
+            if (path[i]._yuievt.subs[type]) {
+                return true;
             }
         }
 
-        return path;
+        return false;
     },
 
+    /**
+    Flattens the bubble path for a given root instance.  Flattens using a
+    breadth-first algo, so given the following bubble structure:
+    ```
+    . (D)  (E)   (D)  (F)
+    .    \  |     |  /
+    .     (B)     (C)       bubble up to
+    .        \   /
+    .         (A)           bubbles up to
+    ```
+    
+    The resulting bubble path would be [A, B, C, D, E, F], and not
+    [A, B, D, E, C, F] (depth-first).  Also note duplicate targets are
+    ignored.  The first appearance in the bubble path wins.
+    
+    @method resolveBubblePath
+    @param root {Object} the origin of the event to bubble (A in the diagram)
+    @return {Array} the ordered list of target instances
+    **/
+    resolveBubblePath: function (root) {
+        var targets = [root],
+            path    = {},
+            target, yuid;
+
+        // Add to the end of the path as we iterate.  This creates a bubble
+        // path where A's immediate bubble targets are all notified, then
+        // each of their respective bubble targets are notified and so on.
+        // (breadth first)
+        for (i = 0; i < targets.length; ++i) {
+            target = targets[i];
+            yuid   = target._yuievt && Y.stamp(target);
+
+            // protect against infinite loops
+            if (yuid && !path[yuid]) {
+                path[yuid] = target;
+
+                if (target._yuievt.bubblePath) {
+                    push.apply(targets, target._yuievt.bubblePath);
+                }
+            }
+        };
+
+        // Less than ideal that this relies on insertion order, which isn't
+        // required by spec. But to date, only V8 returns keys out of order,
+        // and that's specifically when they are numeric. yuid stamps
+        // are strings. This would be a horrifying bug to track down, but it
+        // simplifies the logic and seems pragmatic given the current
+        // commitment of JS engine authors not to break the web.
+        return values(path);
+    },
+
+    /**
+    This event can be subscribed to from other objects in a bubble path, added
+    to with `target.addTarget(parentTarget)`
+
+    @property bubbles
+    @type {Boolean}
+    @default `true`
+    **/
     bubbles: true,
 
     /**
-     * <p>Creates the event object that will be passed to the subscribers.  The
-     * event has the following properties and methods:</p>
-     * <ul>
-     *     <li><code>type</code></li>
-     *     <li><code>target</code></li>
-     *     <li><code>preventDefault()</code></li>
-     *     <li><code>_prevent</code> (reserved)</li>
-     *     <li><code>stopPropagation()</code></li>
-     *     <li><code>stopImmediatePropagation()</code></li>
-     *     <li><code>_stop</code> (reserved)</li>
-     *     <li><code>halt()</code> - stopPropagation() + preventDefault()</li>
-     *     <li><code>detach()</code> - detaches the current subscriber</li>
-     *     <li><code>details</code> - array of additional args passed to
-     *         <code>fire(type, <em>_here_...</em>)</code></li>
-     * </ul>
-     *
-     * <p>If the first additional argument is an object, its properties will be
-     * added to the event object directly as well as being the object being
-     * included in the <code>details</code> property.</p>
-     *
-     * <p>Before it is passed to subscribers, its <code>currentTarget</code> and
-     * <code>subscription</code> properties are updated accordingly by the
-     * <code>notify</code> method.</p>
-     *
-     * @method eventDef.generateEvent
-     * @param host {Object} the instance from which on/after was called
-     * @param type {String} the name of the event
-     * @param args* {any} additional data provided to subscribers.
-     * @return {Object} the event object
-     * @static
-     * @protected
-     */
-    generateEvent: function (host, type, payload) {
-        var data = (isObject(payload)) ? payload : {};
+    The event facade class to use when firing an event. `fire()` generates a
+    single event object that is passed to each subscriber in turn.
 
-        data.target  = data.target || host;
-        data.details = toArray(arguments, 2, true);
+    Unless the `fire()` method has been overridden, This class constructor is
+    called with the following arguments:
 
-        return new this.Event(type, data);
-    },
-
-    /**
-     * The event facade class to use when firing an event.  Fire generates a
-     * single event object that is passed to each subscriber in turn.
-     *
-     * @property eventDef.Event
-     * @type {Function}
-     */
+    * type (string) - The name of the event
+    * target (EventTarget) - The originator of the event
+    * payload (Any[]) - Array of additional args passed `fire(type, HERE...)`
+    
+    @property Event
+    @type {Function}
+    **/
     Event: EventFacade,
 
     /**
-     * <p>Executes all the subscribers in a bubble chain for an event in a given
-     * phase ("before" or "after").  Used by <code>fire</code>.</p>
-     *
-     * <p>If a subscriber calls <code>e.stopImmediatePropagation()</code>, no
-     * further subscribers will be executed, and if a subscriber calls
-     * <code>e.stopPropagation()</code>, no further bubble targets will be
-     * notified.</p>
-     *
-     * @method eventDef.notify
-     * @param path {Array} bubble targets in the order they should be notified
-     * @param event {Object} the event to pass to the subscribers
-     * @param phase {String} the phase location of the subscribers
-     * @static
-     * @protected
-     */
+    Executes all the subscribers in a bubble path for an event in a given
+    phase ("before" or "after").  Used by `fire()`.
+    
+    If a subscriber calls `e.stopImmediatePropagation()`, no
+    further subscribers will be executed, and if a subscriber calls
+    `e.stopPropagation()`, no further bubble targets will be
+    notified.
+    
+    @method notify
+    @param {EventTarget[]} path Bubble targets to be notified
+    @param {EventFacade} event The event object to pass to the subscribers
+    @param {String} phase The phase to identify which subscribers to notify
+    **/
     notify: function (path, event, phase) {
-        var args = toArray(event), // support event facade or list of 0..n args
-            type = event.type,
+        var type = event.type,
             target, subs, sub, i, len, j, jlen;
 
         for (i = 0, len = path.length; i < len; ++i) {
             target = path[i];
-            subs   = this.getSubs(target, type, null, phase);
+            subs   = target._yuievt.subs[type]; // target might not have subs
+            subs   = subs && subs[phase]; // or none for this phase
 
-            if (subs.length) {
-                event.currentTarget = target;
+            if (subs && subs.length) {
+                event.data.currentTarget = target;
 
                 for (j = 0, jlen = subs.length; j < jlen; ++j) {
                     sub = subs[j];
-                    // facilitate e.subscriber.detach();
+                    // facilitate e.detach();
                     event.subscription = sub;
 
-                    sub.notify.apply(sub, args);
+                    sub.notify(event);
 
-                    delete event.subscription;
+                    event.subscription = null;
 
-                    if (event._stop > 1) {
+                    if (event._stopped > 1) {
                         break;
                     }
                 }
 
-                if (event._stop) {
+                if (event._stopped) {
                     break;
                 }
             }
         }
     },
 
+    /**
+    Can this event's `defaultFn` be avoided by calling `e.preventDefault()`?
+
+    @property preventable
+    @type {Boolean}
+    @default `true`
+    **/
     preventable: true,
 
     /**
-     * Replacement for the subscribe method on fireOnce events after they've
-     * fired.  Immediately executes the would be subscription.
-     *
-     * @method eventDef.immediate
-     * @param args {Object} the instance from which on/after was called
-     * @return {boolean} false (prevents formal subscription)
-     * @static
-     * @protected
-     */
-    immediate: function (args) {
-        // FIXME: This needs attention.  Probably can be done with less code.
-        var extra = this.processArgs && this.processArgs(args),
-            sub   = this.generateSub.apply(this, args),
-            event = this._firedWith,
-            abort;
+    Replacement for the subscribe method on fireOnce events after they've
+    fired.  Immediately executes the would be subscription.
+    
+    @method immediate
+    @param {EventTarget} target The instance from which on/after was called
+    @param {String} phase The phase of the subscription
+    @param {Array} args Subscription arguments for the event (type, callback,
+                        context, and extra args)
+    @return {boolean} false (prevents formal subscription)
+    **/
+    immediate: function (target, phase, args) {
+        var event = this._firedWith;
 
-        if (extra) {
-            sub._extra = extra;
-        }
-
-        if (this.on) {
-            abort = this.on.apply(this, args);
-        }
-
-        abort = abort || (sub.phase === "after" &&
-                          this.preventable      &&
-                          event._prevent);
-
-        if (!abort) {
-            event.subscription = sub;
-            event.currentTarget = args[0];
-            sub.callback.apply(sub.thisObj, [event].concat(sub.payload));
+        if (event._stopped < 2 && (phase !== AFTER || !event._prevented)) {
+            // Note: parseSignature and new Subscription are not done because
+            // no subscription is being added, so e.detach() should be a no-op.
+            event.data.currentTarget = target;
+            sub.notify(event);
         }
     },
 
     /**
-     * Get all subscriptions matching the provided type, phase, and
-     * category.  If type is omitted, all subs (in the category if
-     * provided) are returned.  Note, phase is omitted in this case.  If
-     * type is provided and phase is omitted, all subscriptions for that
-     * type in all phases are returned.
-     *
-     * @method getSubs
-     * @param type {string} (optional) the event type
-     * @param cat {string} (optional) subscription category
-     * @param phase {string} (optional) subscription phase
-     * @return {Array}
-     */
-    getSubs: function (target, type, cat, phase) {
-        var store, subs;
+    Remove a subscription or set of subscriptions for this event. If the event
+    has a `detach()` method defined, it will be executed and can prevent the
+    subscription removal by returning a truthy value.
+    
+    @method unsubscribe
+    @param {EventTarget} target The instance from which on/after was called
+    @param {Array} args Arguments passed to `detach(..)`
+    **/
+    unsubscribe: function (target, args) {
+        var type = args[0],
+            subs = target._yuievt.subs,
+            i, phase, abort;
 
-        if (target._yuievt) {
-            store = (cat) ? target._yuievt.cats[cat] : target._yuievt.subs;
+        // Custom detach() can return truthy value to abort the unsubscribe
+        if (this.detach && this.detach.apply(this, args)) {
+            return;
+        }
 
-            if (store && store[type]) {
-                if (phase) {
-                    subs = store[type] && store[type][phase];
+        if (type.type && type.callback && type.phase) {
+            // Use case: detach(sub);
+            subs = subs[type.type][type.phase];
+            for (i = subs.length - 1; i >= 0; --i) {
+                if (subs[i] === type) {
+                    subs.splice(i, 1);
+                    break;
+                }
+            }
+        } else if (subs[type]) {
+            subs     = subs[type];
+            callback = args[1];
+            phase    = args[2];
+
+            if (phase) {
+                if (callback) {
+                    // Use case: detach(type, callback, phase)
+                    subs = subs[phase];
+                    for (i = subs.length - 1; i >= 0; --i) {
+                        if (subs[i].callback === callback) {
+                            subs.splice(i, 1);
+                            break;
+                        }
+                    }
                 } else {
-                    subs = [];
-                    YObject.each(store[type], function (psubs) {
-                        subs.push.apply(subs, psubs);
-                    });
+                    // Use case: detach(type, null, phase)
+                    subs[phase] = [];
                 }
+            } else {
+                // Use case: detach(type, callback) or detach(type)
+                this.unsubscribe(target, [type, callback, BEFORE]);
+                this.unsubscribe(target, [type, callback, AFTER]);
             }
-        }
-
-        return subs ? subs.slice() : [];
-    },
-
-    /**
-     * <p>Returns true if there are any subscriptions in a given phase for
-     * a particular event.  If no phase is specified, all phases are
-     * checked.</p>
-     *
-     * <p>The type string alone will be used to identify the event whose
-     * <code>fire</code> definition should be used, and will not be
-     * compared against conditional events' <code>test(..)</code>
-     * methods.</p>
-     *
-     * @method hasSubs
-     * @param type {String} the name of the event
-     * @param phase {String} (optional) the phase in which to check
-     * @param category {String} (optional) the category in which to check
-     * @return {boolean}
-     */
-    hasSubs: function (host, type, phase, category) {
-        return this.getSubs(host, type, phase, category).length > 0;
-    },
-
-    /**
-     * <p>Subscription tear down or other work that needs to happen each time
-     * a subscription detach is requested.  If the method returns true, the
-     * subscription will be detached.  Return true to abort the detach.</p>
-     * 
-     * @method eventDef.unsubscribe
-     * @param host {Object} the instance from which on/after was called
-     * @param sub {Object} the subscription to detach
-     * @param args* {any} additional arguments passed to <code>detach(..)</code>
-     * @return {boolean} true to detach, false to abort
-     * @static
-     * @protected
-     */
-    unsubscribe: function (host, type, category, phase, callback) {
-        var subs, abort, i, len, sub;
-
-        if (type.detach) {
-            if (this.detach) {
-                abort = this.detach(host, type);
-            }
-            if (!abort) {
-                this.unregisterSub(host, type);
-            }
-            type = type.type;
-        } else {
-            subs = this.getSubs.apply(this, arguments);
-            
-            for (i = 0, len = subs.length; i < len; ++i) {
-                sub = subs[i];
-                if (!callback || sub.callback === callback) {
-                    if (this.detach) {
-                        abort = this.detach(host, sub);
-                    }
-                    if (!abort) {
-                        this.unregisterSub(host, sub);
-                    }
-                }
-            }
-        }
-
-        // TODO: this allows destroy to be called when there were no subs to
-        // begin with.  That doesn't seem right.
-        if (this.destroy && !this.hasSubs(host, type)) {
-            this.destroy(this, type);
         }
     }
-
-    /**
-     * Final one-time tear down after the last subscriber is detached.
-     *
-     * @method eventDef.destroy
-     * @param host {Object} the instance from which on/after was called
-     * @param type {String} the event to tear down
-     * @param args* {any} any additional arguments passed on(type, _here_...)
-     * @return {boolean} true to allow subscription, false to abort
-     * @static
-     * @protected
-     */
 };
 
-function Subscription(args, details) {
-    this.host     = args[0];
-    this.type     = args[1];
-    //FIXME: get rid of category
-    //this.category = cat;
-    this.phase    = args[2];
-    this.callback = args[3];
-    this.thisObj  = args[4] || args[0];
-    this.payload  = args.slice(5);
+/**
+Class to encapsulate an event subscription. Stores the callback, execution
+context (`this` in the callback), and any bound arguments to pass to the
+callback after the event object.
+
+_args_ is expected to be an array containing:
+1. The event type (string)
+1. The subscription callback (function)
+1. Optionally the `this` object override for the callback. Defaults to _target_.
+1. Optionally any additional arguments to pass to the callback
+
+@class Subscription
+@param {EventTarget} target From whence the subscription was made
+@param {Array} args See above
+@param {String} phase The subscription phase
+@param {Any} details Data returned from the event's `parseSignature(args)`
+    method if it has one defined
+**/
+function Subscription(target, args, phase, details) {
+    this.target   = target;
+    this.phase    = phase;
     this.details  = details;
-}
-Subscription.prototype = {
-    notify: function () {
-        var args = arguments;
-        
-        if (this.payload.length) {
-            args = toArray(args, 0, true);
-            args.push.apply(args, this.payload);
-        }
 
-        this.callback.apply(this.thisObj, args);
+    this.type     = args[0];
+    this.callback = args[1];
+    this.thisObj  = args[2] || target;
+
+    if (args.length > 3) {
+        this.payload = slice.call(args, 3);
+    }
+}
+
+Subscription.prototype = {
+
+    /**
+    Call the subscribed callback with the provided event object, followed by
+    any bound subscription arguments.
+
+    @method notify
+    @param {EventFacade} e The event object to pass as first arg to the callback
+    **/
+    notify: function (e) {
+        var args;
+        
+        // Avoid extra work if the subscription didn't bind additional callback
+        // args.
+        if (this.payload) {
+            args = [e];
+            push.apply(args, this.payload);
+
+            this.callback.apply(this.thisObj, args);
+        } else {
+            this.callback.call(this.thisObj, e);
+        }
     },
+
+    /**
+    Detaches the subscription from the subscribed target. Convenience for
+    `this.target.detach(this);`.
+
+    @method detach
+    **/
     detach: function () {
-        this.host.detach(this);
+        this.target.detach(this);
     }
 };
 
-function EventFacade(type, data) {
-    this.type = type,
-    this.data = data || {};
+
+/**
+Event object passed as the first parameter to event subscription callbacks.
+
+Data to distinguish each instance is supplied in the _payload_ array. If the
+first argument is an object (recommended), it is used to seed the event's `data`
+property, which is what houses the data for the `get()` and `set()` methods.
+
+All payload data in the passed array form is stored as the `details` property
+of the event's `data` collection. While it is recommended to use `get()` to
+access event data values, you can access the raw data at `e.data.details`.
+
+@class EventFacade
+@param {String} type The name of the event
+@param {EventTarget} target EventTarget from which `fire()` was called
+@param {Any[]} [payload] Data specific to this event, passed
+**/
+function EventFacade(type, target, payload) {
+    this.type    = type,
+    this.data    = (payload && isObject(payload[0])) ? payload[0] : {};
+
+    this.data.target  = target;
+    this.data.details = payload;
 }
 function fromProperty(name) { return this[name]; }
 EventFacade.prototype = {
+    /**
+    Collection of getters to apply special logic to accessing certain data
+    properties. This is a shared object on the prototype, so be careful if you
+    modify it.
+
+    @property _getter
+    @type {Object}
+    @protected
+    **/
     _getter: {
-        type   : fromProperty,
-        details: fromProperty
+        type: fromProperty
     },
 
+    /**
+    Collection of setters to apply special logic to assigning certain data
+    properties. This is a shared object on the prototype, so be careful if you
+    modify it.
+
+    @property _setter
+    @type {Object}
+    @protected
+    **/
     _setter: {},
 
-    _prevent: false,
-    _stop   : 0,
+    /**
+    Has `e.preventDefault()` been called on this event?
 
+    @property _prevented
+    @type {Boolean}
+    @default `false`
+    **/
+    _prevented: false,
+
+    /**
+    Has `e.stopPropagation()` or `e.stopImmediatePropagation()` been called on
+    this event?
+
+    Value will be one of:
+    * 0 - unstopped (default)
+    * 1 - `e.stopPropagation()` called
+    * 2 - `e.stopImmediatePropagation()` called
+
+    @property _prevented
+    @type {Number}
+    @default `0`
+    **/
+    _stopped  : 0,
+
+    /**
+    Disables any default behavior (`defaultFn`) associated with the event. This
+    will also prevent any `after()` subscribers from being executed.
+
+    @method preventDefault
+    @chainable
+    **/
     preventDefault: function () {
-        this._prevent = true;
+        this._prevented = true;
+
+        return this;
     },
 
+    /**
+    Stops the event from bubbling to subsequent bubble targets. All subscribers
+    on the current bubble target will be executed.
+
+    Does not prevent the event's default behavior or its `after()` subscribers
+    from being called.
+
+    @method stopPropagation
+    @chainable
+    **/
     stopPropagation: function () {
-        this._stop = 1;
+        this._stopped = 1;
+
+        return this;
     },
 
+    /**
+    Stops the event from bubbling to subsequent bubble targets and stops
+    notification of additional subscribers on the current bubble target.
+
+    Does not prevent the event's default behavior or its `after()` subscribers
+    from being called.
+
+    @method stopImmediatePropagation
+    @chainable
+    **/
     stopImmediatePropagation: function () {
-        this._stop = 2;
+        this._stopped = 2;
+
+        return this;
     },
 
-    halt: function () {
-        this.preventDefault();
-        this.stopPropagation();
+    /**
+    Convenience function to do both `e.preventDefault()` and
+    `e.stopPropagation()`. Pass a truthy value as _immediate_ to
+    `e.stopImmediatePropagation()` instead.
+
+    @method halt
+    @param {Boolean} [immediate] Trigger `e.stopImmediatePropagation()`
+    @chainable
+    **/
+    halt: function (immediate) {
+        this._prevented = true;
+        this._stopped = immediate ? 2 : 1;
+
+        return this;
     },
 
+    /**
+    Detaches the subscription for this callback.
+
+    @method detach
+    @chainable
+    **/
     detach: function () {
-        this.subscription.detach();
+        this.subscription && this.subscription.detach();
+
+        return this;
     },
 
+    /**
+    Get a property from the event's data collection supplied at event creation.
+    If a getter is defined for the property, its return value will be returned.
+    Otherwise, the property from the data collection, if present, will be
+    returned.
+
+    @method get
+    @param {String} name Data property name
+    @return {Any} whatever is stored in the data property
+    **/
     get: function (name) {
         return (this._getter[name]) ?
             this._getter[name](name) :
             this.data[name];
     },
 
+    /**
+    Set a property in the event's data collection. If a setter is defined for
+    the property, it will be called with the _name_ and _val_. Otherwise, the
+    property and value will be assigned to the data collection directly.
+
+    @method set
+    @param {String} name Data property name
+    @param {Any} val The value to assign
+    @chainable
+    **/
     set: function (name, val) {
         if (this._setter[name]) {
             this._setter[name](name, val);
         } else {
             this.data[name] = val;
         }
+
+        return this;
     }
 };
 
+
+/**
+Augmentation class or superclass to add event related API methods.
+
+@class EventTarget
+@constructor
+**/
+function EventTarget() {
+    this._yuievt = {
+        subs      : {},
+        events    : proto(this.constructor.events || {}),
+        // TODO: Can this be moved to event behavior?
+        bubblePath: []
+    };
+}
+
 Y.mix(EventTarget, {
     /**
-     * Pattern used to split detach category from event type.  By default,
-     * It matches <code>on("foo|bar",..)</code> as category "foo" and type
-     * "bar", and <code>on("baz",..)</code> as category "" and type as "baz".
-     *
-     * @property _TYPE_PATTERN
-     * @type {Regexp}
-     * @default /(?:([^|]+?)\|)?(.*)/
-     * @static
-     * @private
-     */
-    _TYPE_PATTERN: /(?:([^|]+?)\|)?(.*)/,
+    Configures a class as an EventTarget, adding the static `publish()` method,
+    constructing its default event, and publishing any specific class events.
 
-    /** 
-     * Set up the event infrastructure for a class.  If the class hosts an
-     * EVENTS static property, it will be used to seed the known events for all
-     * class instances.  Optionally supply an object of event definitions for
-     * this purpose.
-     *
-     * @method Event.initEvents
-     * @param events {Object} (optional) collection of event definitions
-     * @static
-     */
-    initEvents: function (target, events, config) {
-        if (!target._yuievt) {
-            events = events || {};
+    It is necessary to call this method before any instances of a class are
+    created. It is advisable to `configure` a class when the class is defined.
 
-            target._yuievt = {
-                subs      : {},
-                cats      : {},
-                events    : { _DEFAULT: new Y.CustomEvent() },
-                conEvents : {},
-                bubblePath: []
-            };
+    Supply a _baseEvent_ as a CustomEvent instance or as an object of property
+    and method overrides. Overrides will be applied to either an instance of the
+    superclass's base event if the class is an EventTarget, or to a stock
+    instance of CustomEvent. The _baseEvent_ will be used as the prototype for
+    all published events on the class or its instances. If omitted, an instance
+    derived from the superclass's base event will be used, falling back to a
+    stock CustomEvent.
 
-            // TODO: Adding a new static method seems a little invasive.
-            target.publish = EventTarget.publish;
+    Supply a _defaultEvent_ as a CustomEvent instance or as an object of
+    property and method overrides. Overrides will be applied to either an
+    instance of the superclass's default event if the class is an EventTarget,
+    or to an event derived from the _baseEvent_. If omitted, an instance
+    derived from the superclass's default event will be used, falling back to
+    an event derived from the base event.
+
+    It is still necessary for EventTarget subclass constructors to call the
+    EventTarget constructor. This method only sets up the class level events and
+    publish mechanism.
+
+    @method configure
+    @param {Object|Function} Class The class or object instance to enable
+                                events for
+    @param {Object} [events] Class events to publish
+    @param {Object|CustomEvent} [baseEvent] Event to establish base behavior for
+                                    all published class events
+    @param {Object|CustomEvent} [defaultEvent] Event to handle unknown events
+                                    and establish base behavior for all class
+                                    events
+    @static
+    **/
+    configure: function (Class, events, baseEvent, defaultEvent) {
+        var superEvents = Class.superclass &&
+                          Class.superclass.constructor.events,
+            isInstance  = typeof Class !== 'function',
+            superEvent;
+
+        if (!isInstance) {
+            // Add the static publish method to the class
+            Class.publish = function () {
+                // bind to the class for portability
+                return EventTarget.publish.apply(Class, arguments);
+            }
         }
 
-        if (config) {
-            Y.mix(target._yuievt, config);
+        // Create the class's @BASE event if necessary
+        if (!(baseEvent instanceof CustomEvent)) {
+            if (superEvents) {
+                superEvent = superEvents[BASE];
+            }
+
+            baseEvent = new CustomEvent(BASE, baseEvent, superEvent);
         }
+
+        // Create the class's @DEFAULT event if necessary
+        if (!(defaultEvent instanceof CustomEvent)) {
+            if (superEvents) {
+                superEvent = superEvents[DEFAULT];
+            }
+
+            defaultEvent = new CustomEvent(DEFAULT,
+                defaultEvent, superEvent || baseEvent);
+        }
+
+        (isInstance ? Class._yuievt : Class).events = {
+            '@BASE'   : baseEvent,
+            '@DEFAULT': defaultEvent
+        };
 
         if (events) {
-            EventTarget._publish(target, events);
+            Class.publish(events);
         }
     },
 
-    publish: function (eventDef, o) {
-        return EventTarget._publish(this, eventDef, o);
+    /**
+    Publishes an event for all instances of a class.
+
+    This method is added to EventTarget subclasses by
+    `EventTarget.configure(MyClass,...)`.
+
+    Define specific behavioral overrides from the class's base event in the
+    _config_ object. If the event doesn't have special behavior, it is not
+    necessary to publish it.
+
+    If an event should behave like an event other than the base event, pass that
+    CustomEvent object as _inheritsFrom_. _config_ overrides will be applied
+    over the inherited event's behaviors.
+
+    Pass an object map of event names to configuration objects to publish
+    multiple events at once.
+
+    @method publish
+    @param {String|Object} type The name of the event to publish or a map of
+                                configs
+    @param {Object} [config] Behavioral extensions and overrides for this event
+    @param {CustomEvent} [inheritsFrom] Instead of deriving from the class's
+                            default event
+    @static
+    **/
+    publish: function (type, config, inheritsFrom) {
+        EventTarget._publish(this, this.events, type, config, inheritsFrom);
     },
 
-    _publish: function (host, eventDef, o) {
-        // TODO: Add support for publish("foo", FooClass) that just instantiates
-        // FooClass?
-        switch (YLang.type(eventDef)) {
-            case "object":
-                if (eventDef.type) {
-                    break;
-                } else {
-                    YObject.each(eventDef, function (def, type) {
-                        this._publish(host, Y.mix(def, { type: type }));
-                    }, this);
-                    return this;
-                }
-            case "string":
-                return this._publish(host, Y.mix((o || {}), { type: eventDef }));
-            default :
-                return this;
-        }
+    /**
+    Does the work for class and instance `publish()` methods.
 
-        // At this point, eventDef should be an object with type and
-        // optionally pattern or test properties.
-        var type = eventDef.type,
-            events, known, BaseClass, EventClass;
+    @method _publish
+    @param {Function|EventTarget} target Class or instance to publish on
+    @param {Object} events Map of events on the class or instance
+    @param {String|Object} type The name of the event to publish or a map of
+                                configs
+    @param {Object} [config] Behavioral extensions and overrides for this event
+    @param {CustomEvent} [inheritsFrom] Instead of deriving from the class's
+                            base event
+    @static
+    @protected
+    **/
+    _publish: function (target, events, type, config, inheritsFrom) {
+        var event;
 
-        if (type) {
-            if (eventDef.pattern && !eventDef.test) {
-                // Memoize a test function for the regex
-                eventDef.test = Y.cached(function (type) {
-                    return this.pattern.test(type);
-                });
-            }
-
-            events = host._yuievt.events;
-
-            known = events[type];
-
-            if (known && owns(events, type)) {
-                // Update definition
-
-                // TODO: init and subscribe for each existing sub?  Is
-                // there any reasonable way to discover if this is needed?
-                Y.mix(known, eventDef, true);
-            } else {
-                base = events[type] || events._DEFAULT;
-                BaseClass = (base) ? base.constructor : Y.CustomEvent;
-
-                EventClass = function () {
-                    BaseClass.apply(this, arguments);
-                };
-                Y.extend(EventClass, BaseClass, eventDef);
-
-                events[type] = new EventClass();
-            }
-
-            if (events[type].test) {
-                host._yuievt.conEvents[type] = events[type].test;
-            }
-        }
-
-        return host;
-    },
-
-    prototype: {
-        /**
-         * Sets up the event state and subscription storage for this instance.
-         *
-         * @method _initEvents
-         * @protected
-         */
-        _initEvents: function (events, config) {
-            var classConfig = this.constructor._yuievt;
-            
-            this._yuievt = {
-                subs      : {},
-                cats      : {},
-                events    : (classConfig) ? proto(classConfig.events) : {},
-                conEvents : (classConfig) ? proto(classConfig.conEvents) : {},
-                bubblePath: []
-            };
-
-            if (config) {
-                Y.mix(this._yuievt, config);
-            }
-
-            if (events) {
-                this.publish(events);
-            }
-        },
-
-        /**
-         * <p>Add a new event to this instance's collection of events.  Use
-         * this to add an event with specific default behavior, preventedFn
-         * behavior, or special subscription/detach logic (etc).  If the event
-         * doesn't behave in any way different from the default, you don't have
-         * to publish it.  If the event applies to all instances, define it in
-         * the static <code>_events</code> collection for the class.</p>
-         *
-         * <p>Accepts an event definition object with properties and methods to
-         * override those defined in the <code>defaultEvent</code>.  See the
-         * description of <code>Y.Event.API.defaultEvent</code> for the
-         * properties and methods to include.  Any methods or properties not
-         * defined will be provided by the <code>defaultEvent</code>.</p>
-         *
-         * <p>If the <code>pattern</code> property is set to a regular
-         * expression, it will be wrapped in a memoized <code>test</code>
-         * function automatically.</p>
-         *
-         * <p>Include a <code>type</code> property in the event definition, or
-         * pass the type string as the first parameter and the overrides as the
-         * second.</p>
-         *
-         *
-         * @method publish
-         * @param eventDef {Object} collection of event methods/properties
-         * @return {Object} the instance
-         * @chainable
-         */
-        publish: function (eventDef, o) {
-            return EventTarget._publish(this, eventDef, o);
-        },
-
-        /**
-         * <p>Subscribe to an event on this object.  Subscribers in this
-         * "before" phase will have access to prevent any default event
-         * behaviors (if the event permits prevention).</p>
-         *
-         * <p>The first argument must be a type string identifying the event.
-         * The string can include a detach category.  Additionally, if no event
-         * specifically matches the type string, a conditional event might be
-         * used if its <code>test(..)</code> method indicates a match.
-         * Otherwise, the default event definition will be used for the
-         * specified type.</p>
-         *
-         * <p>Individual events can define how the subscription params are
-         * handled, but the default signature is
-         * <code>on( type, callback, thisObj, arg0..argN )</code> where
-         * <code>thisObj</code> will be used for 'this' in the callback, and
-         * the additional arguments will be passed to the callback after the
-         * event object.</p>
-         *
-         * @method on
-         * @param type {String} event type to subcribe to, with optional detach
-         *                      category
-         * @param arg* {any} see above note on default signature
-         * @return {Object} this instance
-         * @chainable
-         */
-        on: function (type) {
-            var args = toArray(arguments, 1, true);
-            args.unshift(type, "before");
-
-            return this._subscribe(args);
-        },
-
-        /**
-         * <p>Subscribe to an event on this object.  Subscribers in this
-         * "after" phase will NOT have access to prevent any default event
-         * behaviors (if the event permits prevention), but will also not
-         * be executed unless the default behavior executes.</p>
-         *
-         * <p>The first argument must be a type string identifying the event.
-         * The string can include a detach category.  Additionally, if no event
-         * specifically matches the type string, a conditional event might be
-         * used if its <code>test(..)</code> method indicates a match.
-         * Otherwise, the default event definition will be used for the
-         * specified type.</p>
-         *
-         * <p>Individual events can define how the subscription params are
-         * handled, but the default signature is
-         * <code>after( type, callback, thisObj, arg0..argN )</code> where
-         * <code>thisObj</code> will be used for 'this' in the callback, and
-         * the additional arguments will be passed to the callback after the
-         * event object.</p>
-         *
-         * @method after
-         * @param type {String} event type to subcribe to, with optional detach
-         *                      category
-         * @param arg* {any} see above note on default signature
-         * @return {Object} this instance
-         * @chainable
-         */
-        after: function (type) {
-            var args = toArray(arguments, 1, true);
-            args.unshift(type, "after");
-
-            return this._subscribe(args);
-        },
-
-        /**
-         * <p>Subscribe to an event on this object.  This method is a catchall
-         * for events that might support more than the standard "before" (aka
-         * "on") and "after" phases.  This method allows for subscription to
-         * any event phase.</p>
-         *
-         * <p>The first argument must be a phase string.  Passing the string
-         * "before", for example, mimics the behavior of
-         * <code>on(...)</code>.</p>
-         *
-         * <p>The second argument must be a type string identifying the event.
-         * The string can include a detach category.  Additionally, if no event
-         * specifically matches the type string, a conditional event might be
-         * used if its <code>test(..)</code> method indicates a match.
-         * Otherwise, the default event definition will be used for the
-         * specified type.</p>
-         *
-         * <p>Individual events can define how the subscription params are
-         * handled, but the default signature is
-         * <code>subscribe(phase, type, callback, thisObj, arg0..argN)</code>
-         * where <code>thisObj</code> will be used for 'this' in the callback,
-         * and the additional arguments will be passed to the callback after
-         * the event object.</p>
-         *
-         * @method subscribe
-         * @param phase {String} event phase to attach subscription
-         * @param type {String} event type to subcribe to, with optional detach
-         *                      category
-         * @param arg* {any} see above note on default signature
-         * @return {Object} this instance
-         * @chainable
-         */
-        subscribe: function () {
-            return this._subscribe(toArray(arguments));
-        },
-
-        /**
-         * Does the work for <code>on(..)</code>, <code>after(..)</code>, and
-         * <code>subscribe(..)</code>.
-         * 
-         * @param args {Array} [type, phase, arg*] to identify and dispatch to
-         *                      the appropriate event definition
-         * @return {Object} this instance
-         * @chainable
-         * @protected
-         */
-        _subscribe: function (args) {
-            var type = args[0],
-                catAndType, category, eventDef;
-
-            if (isString(type)) {
-                catAndType = type.match(EventTarget._TYPE_PATTERN) || [];
-                category = catAndType[1];
-
-                type     = catAndType[2];
-                eventDef = this.getEvent(type, args);
-
-                args.splice(0, 1, this, type, category);
-
-                eventDef.subscribe(args);
-
-            // Handle signature overloading last to optimize the common case
-            } else if (YLang.isArray(type)) {
-                each(type, function (t) {
-                    args[0] = t;
-                    this._subscribe(args);
-                }, this);
-            } else if (isObject(type)) {
-                YObject.each(type, function (arg2, t) {
-                    args[0] = t;
-                    args[2] = arg2;
-                    this._subscribe(args);
-                }, this);
-            }
-
-            return this;
-        },
-
-        /**
-         * Finds the best match for the type specified, optionally testing
-         * against any hosted conditional events.  If all else fails, the
-         * default event definition is returned.
-         *
-         * @method getEvent
-         * @param type {String} the name of the event
-         * @param match {Array} (optional) additional args to pass to
-         *                      <code>test(..)</code> to match against any
-         *                      hosted conditional events
-         * @return {Object} an event definition object
-         */
-        getEvent: function (type, match) {
-            var config   = this._yuievt || this.constructor._yuievt,
-                eventDef = (config) ? config.events[type] : null,
-                events, k, def;
-
-            if (!eventDef && config && match && isString(type)) {
-                // don't modify the match args directly.  Copy first.
-                match = match.slice(2);
-                match.unshift(this, type);
-                events = config.conEvents;
-                for (k in events) {
-                    def = events[k];
-                    if (def.subscribe && def.test &&
-                        def.test.apply(def, match)) {
-                        eventDef = def;
-                        break;
-                    }
+        if (isObject(type)) {
+            for (event in type) {
+                if (type.hasOwnProperty(event)) {
+                    EventTarget._publish(target, events, event,
+                        type[event], inheritsFrom);
                 }
             }
+        } else {
+            event = events[type];
 
-            return eventDef || config.events._DEFAULT;
-        },
-
-        /**
-         * <p>Trigger the execution of subscribers to a specific event.  The
-         * particular logic used for the notification is defined in the event
-         * definition's <code>fire(..)</code> method.  If not specified there,
-         * the default event's <code>fire(..)</code method is used.</p>
-         *
-         * <p>As noted in <code>eventDef.fire</code>, the global default
-         * event's <code>fire</code> executes the "before" (aka "on") phase
-         * subscribers, then the event's default behavior if it has one, then
-         * the "after" phase subscribers, but this can be overridden per
-         * event.  More detail is available in the API doc for
-         * the (protected) <code>eventDef.fire</code> method.</p>
-         *
-         * <p>The type string alone will be used to identify the event whose
-         * <code>fire</code> definition should be used, and will not be
-         * compared against conditional events' <code>test(..)</code>
-         * methods.</p>
-         * 
-         * @method fire
-         * @param type {String} the type identifying the event whose
-         *                      <code>fire(..)</code> to use.
-         * @param args* {any} extra arguments to pass along
-         * @return {Object} this instance
-         * @chainable
-         */
-        fire: function (type) {
-            var eventDef = this.getEvent(type),
-                args = toArray(arguments, 0, true);
-
-            args.unshift(this);
-
-            eventDef.fire.apply(eventDef, args);
-
-            return this;
-        },
-
-        /**
-         * <p>Unsubscribe one or multiple subscribers.  Some example signatures
-         * are:</p>
-         * <table>
-         *     <thead>
-         *         <tr><th>Called with</th><th>What is detached</th></tr>
-         *     </thead>
-         *     <tbody>
-         *         <tr>
-         *             <td><code>detach()</code></td>
-         *             <td>All subscriptions to all events in all phases</td>
-         *         </tr>
-         *         <tr>
-         *             <td><code>detach(subscriptionObject)</code></td>
-         *             <td>That subscription</td>
-         *         </tr>
-         *         <tr>
-         *             <td><code>detach("foo")</code></td>
-         *             <td>All subscriptions to event "foo" in all phases</td>
-         *         </tr>
-         *         <tr>
-         *             <td><code>detach("foo", "before")</code></td>
-         *             <td>All subscriptions to event "foo" in the "before"
-         *                 phases</td>
-         *         </tr>
-         *         <tr>
-         *             <td><code>detach("foo", "before", callbackFunc)*</code></td>
-         *             <td>All subscriptions to event "foo" in the "before"
-         *                 phase that are bound to callbackFunc  (*See below for
-         *                 notes)</td>
-         *         </tr>
-         *         <tr>
-         *             <td><code>detach("cat:*")</code></td>
-         *             <td>All subscriptions to all events in all phases that
-         *                 were subscribed with category "cat" (e.g.
-         *                 <code>on("cat:foo", ...)</code>)</td>
-         *         </tr>
-         *         <tr>
-         *             <td><code>detach("cat:foo")</code></td>
-         *             <td>All subscriptions to event "foo" in all phases that
-         *                 were subscribed with category "cat"</td>
-         *         </tr>
-         *     </tbody>
-         * </table>
-         *
-         * <p>Note, parameters beyond the type and phase are passed to the
-         * event's <code>match</code> method to apply any signature
-         * specific filtration for the subscriber list, so the detach signature
-         * that passes the callback is just an example of the signature
-         * supported by the default event.</p>
-         *
-         * @method detach
-         * @param typeSpec {Object|String} (optional) event subscription object
-         *                      or event type string, optionally with category
-         * @param phase {String} (optional) phase from which to detach
-         * @param args* {any} additional arguments used by the event's
-         *                      <code>match</code> method to better
-         *                      isolate which sub(s) to detach.
-         * @return {Object} this instance
-         * @chainable
-         */
-        detach: function (typeSpec) {
-            var args = toArray(arguments, 0, true),
-                eventDef, catAndType, type, category;
-
-            args.unshift(this);
-
-            if (typeSpec && typeSpec.detach) {
-                eventDef = this.getEvent(typeSpec.type);
-                eventDef.unsubscribe.apply(eventDef, args);
-            } else {
-                catAndType = (typeSpec || '*')
-                                .match(EventTarget._TYPE_PATTERN) || [];
-                category   = catAndType[1];
-                type       = catAndType[2];
-
-                if (type && type !== '*') {
-                    eventDef = this.getEvent(type);
-
-                    args.splice(1, 1, type, category);
-
-                    eventDef.unsubscribe.apply(eventDef, args);
-                } else {
-                    this.detachAll(category);
-                }
-            }
-            
-            return this;
-        },
-
-        detachAll: function (category) {
-            // TODO/FIXME: this is the only place in the API  where knowledge
-            // of the subscription storage structure is required
-            var subs = (category) ?
-                        this._yuievt.cats[category] : this._yuievt.subs,
-                type, eventDef;
-
-            if (subs) {
-                for (type in subs) {
-                    if (owns(subs, type)) {
-                        eventDef = this.getEvent(type);
-                        eventDef.unsubscribe(this, type);
-                    }
-                }
+            if (config instanceof CustomEvent) {
+                event = config;
+            } else if (!event || inheritsFrom) {
+                event = new CustomEvent(type, config,
+                                inheritsFrom || events[BASE]);
+            } else if (event) {
+                Y.mix(event, config);
             }
 
-            return this;
-        },
-
-        /**
-         * Add a bubble target, allowing subscriptions from the bubble target
-         * for events emitted by this object.
-         *
-         * @method addTarget
-         * @param target {Object} instance of an object augmented with Event.API
-         * @return {Object} this instance
-         * @chainable
-         */
-        addTarget: function (target) {
-            if (!this._yuievt) {
-                this._initEvents();
+            if (event.publish) {
+                event.publish(target);
             }
 
-            if (arrayIndex(this._yuievt.bubblePath, target) === -1) {
-                this._yuievt.bubblePath.push(target);
-            }
-
-            return this;
+            events[type] = event;
         }
     }
+
 }, true);
 
-Y.mix(Y.namespace("EventX"), {
-    CustomEvent: CustomEvent,
-    Facade     : EventFacade,
-    Target     : EventTarget,
-    pushByPath : pushByPath
-});
+EventTarget.prototype = {
+    /**
+    Add a new event to this instance's collection of events.  Use
+    this to add an event with specific default behavior, preventedFn
+    behavior, or special subscription/detach logic (etc).  If the event
+    doesn't behave in any way different from the base event, you don't have
+    to publish it.  If the event applies to all instances, publish it
+    statically for the class instead.
+    
+    Accepts an event configuration object with properties and methods to
+    override those defined in the class's base event. Optionally, a
+    different base event can be used by passing it as _inheritsFrom_.
+    
+    Pass the type string as the first parameter and the configuration as the
+    second. Alternately, pass an object map of type => configs.
+    
+    @method publish
+    @param {String|Object} type Name of the event or map of types to configs
+    @param {Object} config Event configuration overrides from the defaults
+    @chainable
+    **/
+    publish: function (type, config, inheritsFrom) {
+        EventTarget._publish(this, this._yuievt.events,
+            type, config, inheritsFrom);
+
+        return this;
+    },
+
+    /**
+    Get the event by name. If the named or default event would route the named
+    event to another event, that logic is not performed.
+
+    To exclude the default event, pass a truthy value to _publishedOnly_.
+
+    @method getEvent
+    @param {String} type The event name
+    @param {Boolean} [publishedOnly] Don't return the default event
+    @return {CustomEvent}
+    **/
+    getEvent: function (type, publishedOnly) {
+        var event = this._yuievt.events[type];
+
+        return event || (!publishedOnly && this._yuievt.events[DEFAULT]);
+    },
+
+    /**
+    Subscribe to an event on this object.  Subscribers in this "before"
+    phase will have access to prevent any default event behaviors (if the
+    event permits prevention).
+    
+    _type_ may be a string identifying the event or an object map of types to
+    callback functions.
+
+    Custom events may override the default subscription signature, but
+    by default the subscription signature will look like this:
+
+    ```
+    target.on(type, callback, thisObj, extraArg, ...exrtraArgN);
+    ```
+
+    _thisObj_ is optional, and sets the _callback_'s `this` object. The default
+    `this` object in the callback is `target`, the object from which `on()` was
+    called. Arguments beyond _thisObj_ will be passed to the callback after the
+    event object generated by `fire()`.
+    
+    If no event published for this class or instance matches the type
+    string exactly, the default event behavior will be used.
+    
+    @method on
+    @param {String} type event type to subcribe to
+    @param {Any*} sigArgs see above note on default signature
+    @chainable
+    **/
+    on: function (type) {
+        var event = this._yuievt.events[type],
+            args  = arguments;
+
+        if (!event) {
+            if (typeof type === STRING) {
+                event = this._yuievt.events[DEFAULT];
+            } else {
+                args = toArray(args, 0, true);
+                args.splice(1, 0, BEFORE);
+                // Defer object/array syntax handling to subscribe()
+                return this.subscribe.apply(this, args);
+            }
+        }
+
+        event.subscribe(this, BEFORE, args);
+
+        return this;
+    },
+
+    /**
+    Subscribe to an event on this object.  Subscribers in this "after"
+    phase will not have access to prevent any default behaviors (if the event
+    permits prevention), but will also not be executed unless the default
+    behavior executes.
+    
+    _type_ may be a string identifying the event or an object map of types to
+    callback functions.
+
+    Custom events may override the default subscription signature, but
+    by default the subscription signature will look like this:
+
+    ```
+    target.after(type, callback, thisObj, extraArg, ...exrtraArgN);
+    ```
+
+    _thisObj_ is optional, and sets the _callback_'s `this` object. The default
+    `this` object in the callback is `target`, the object from which `on()` was
+    called. Arguments beyond _thisObj_ will be passed to the callback after the
+    event object generated by `fire()`.
+    
+    If no event published for this class or instance matches the type
+    string exactly, the default event behavior will be used.
+    
+    @method after
+    @param {String} type event type to subcribe to
+    @param {Any*} sigArgs see above note on default signature
+    @chainable
+    **/
+    after: function (type) {
+        var event = this._yuievt.events[type],
+            args  = arguments;
+
+        if (!event) {
+            if (typeof type === STRING) {
+                event = this._yuievt.events[DEFAULT];
+            } else {
+                args = toArray(args, 0, true);
+                args.splice(1, 0, AFTER);
+                // Defer object/array syntax handling to subscribe()
+                return this.subscribe.apply(this, args);
+            }
+        }
+
+        event.subscribe(this, AFTER, args);
+
+        return this;
+    },
+
+    /**
+    Subscribe to an event on this object.  This method is a catchall
+    for events that might support more than the standard "before" (aka
+    "on") and "after" phases.  This method allows for subscription to
+    any event phase.
+    
+    _type_ may be a string identifying the event or an object map of types to
+    callback functions.
+
+    Custom events may override the default subscription signature, but
+    by default the subscription signature will look like this:
+
+    ```
+    target.subscribe(type, phase, callback, thisObj, extraArg, ...exrtraArgN);
+    ```
+
+    _thisObj_ is optional, and sets the _callback_'s `this` object. The default
+    `this` object in the callback is `target`, the object from which `on()` was
+    called. Arguments beyond _thisObj_ will be passed to the callback after the
+    event object generated by `fire()`.
+    
+    If no event published for this class or instance matches the type
+    string exactly, the default event behavior will be used.
+    
+    @method subscribe
+    @param {String} type {String} event type to subcribe to
+    @param {String} phase {String} event phase to attach subscription
+    @param {Any*} sigArgs see above note on default signature
+    @chainable
+    **/
+    subscribe: function (type, phase) {
+        var event = this._yuievt.events[type],
+            args  = toArray(arguments, 0, true),
+            i, len;
+
+        if (!event) {
+            if (typeof type === STRING) {
+                event = this._yuievt.events[DEFAULT];
+            } else if (isObject(type)) {
+
+                if (isArray(type)) {
+                    for (i = 0, len = type.length; i < len; ++i) {
+                        args[0] = type[i];
+                        this.subscribe.apply(this, args);
+                    }
+                } else {
+                    for (event in type) {
+                        if (type.hasOwnProperty(event)) {
+                            args[0] = event;
+                            // Weak point, assumes signature includes callback
+                            // as third arg for the event (sorta).
+                            args[2] = type[event];
+                            this.subscribe.apply(this, args);
+                        }
+                    }
+                }
+
+                return this;
+            }
+        }
+
+        // Remove phase from args array. It's passed separately
+        args.splice(1, 1);
+
+        event.subscribe(this, phase, args);
+
+        return this;
+    },
+
+    /**
+    Trigger the execution of subscribers to a specific event. The default
+    notification order for events is:
+
+    1. `on()` subscribers on this object, in the order they were subscribed
+    2. `on()` subscribers up the bubble path
+    3. `defaultFn` for the event if configured
+    4. `after()` subscribers on this object, in subscription order
+    5. `after()` subscribers up the bubble path
+    
+    Events can be configured with alternate notification logic, though this
+    is rare.
+
+    Subscribers will be called with a first parameter `e`, which is an
+    EventFacade seeded with the data passed to `fire()`. See that class
+    definition for details. Note, events can also be reconfigured to use
+    an alternate EventFacade class, though again this is rare.
+    
+    @method fire
+    @param {String} type The type of event whose subscribers to notify
+    @param args* {any} extra arguments to pass along
+    @chainable
+    **/
+    fire: function (type) {
+        var event = this._yuievt.events[type] ||
+                    this._yuievt.events[DEFAULT],
+            args  = toArray(arguments, 0, true);
+
+        args.unshift(this);
+
+        event.fire.apply(event, args);
+
+        return this;
+    },
+
+    /**
+    Unsubscribe one or multiple subscribers.  Some example signatures are:
+
+    <table>
+        <thead>
+            <tr><th>Called with</th><th>What is detached</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>`detach()`</td>
+                <td>All subscriptions to all events in all phases</td>
+            </tr>
+            <tr>
+                <td>`detach(subscriptionObject)`</td>
+                <td>That subscription</td>
+            </tr>
+            <tr>
+                <td>`detach("foo")`</td>
+                <td>All subscriptions to event "foo" in all phases</td>
+            </tr>
+            <tr>
+                <td>`detach("foo", "before")`</td>
+                <td>All subscriptions to event "foo" in the "before"
+                    phases</td>
+            </tr>
+            <tr>
+                <td>`detach("foo", "before", callbackFunc)*`</td>
+                <td>All subscriptions to event "foo" in the "before"
+                    phase that are bound to callbackFunc  (*See below for
+                    notes)</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    Note, parameters beyond the type are passed to the event's `detach`
+    method to apply any signature specific filtration for the subscriber
+    list, so the detach signature that passes the callback is just an
+    example of the signature supported by the default event.
+    
+    @method detach
+    @param type {String} (optional) event subscription object
+                         or event type string, optionally with category
+    @param phase {String} (optional) phase from which to detach
+    @param args* {any} additional arguments used by the event's
+                         `detach` method to better
+                         isolate which sub(s) to detach.
+    @return {Object} this instance
+    @chainable
+    **/
+    detach: function (type) {
+        var events = this._yuievt.events,
+            event;
+
+        if (type) {
+            // type.type to support detach(sub)
+            event = events[type.type] || events[type] || events[DEFAULT];
+            event.unsubscribe(this, arguments);
+        } else {
+            this.detachAll();
+        }
+
+        return this;
+    },
+
+    /**
+    Detaches all event subscriptions on the instance.
+
+    @method detachAll
+    @chainable
+    **/
+    detachAll: function () {
+        var subs   = this._yuievt.subs,
+            detach = [],
+            event, phase, i;
+
+        // Flatten the list of subs first because sub.detach() will modify the
+        // lists.
+        for (event in subs) {
+            if (subs.hasOwnProperty(event)) {
+                for (phase in subs[event]) {
+                    if (subs[event].hasOwnProperty(phase)) {
+                        push.apply(detach, subs[event][phase]);
+                    }
+                }
+            }
+        }
+
+        for (i = detach.length - 1; i >= 0; --i) {
+            detach[i].detach && detach[i].detach();
+        }
+
+        // Final clean up
+        this._yuievt.subs = {};
+
+        return this;
+    },
+
+    /**
+    Add a bubble target, allowing subscriptions from the bubble target for
+    events emitted by this object.
+    
+    @method addTarget
+    @param target {Object} instance of an object augmented with Event.API
+    @return {Object} this instance
+    @chainable
+    **/
+    addTarget: function (target) {
+        if (arrayIndex(this._yuievt.bubblePath, target) === -1) {
+            this._yuievt.bubblePath.push(target);
+        }
+
+        return this;
+    }
+};
 
 Y.CustomEvent = CustomEvent;
 Y.EventFacade = EventFacade;
 Y.EventTarget = EventTarget;
 
-EventTarget.initEvents(EventTarget);
-
-
-
-// Add the API to Y
-// TODO: submodule?
-Y.mix(Y, EventTarget.prototype, true);
-EventTarget.call(Y, {
-    _DEFAULT: {
-        // Allow Y.on/after/subscribe behavior to be extensible.  E.g. if
-        // eventx-node is loaded, it will redirect Y.on('click', fn, '.foo')
-        // to Y.all('.foo').on('click', fn);  Similarly with Y.Do, and raw
-        // DOM subscriptions
-        init: function () {
-            if (this.type === '_DEFAULT') {
-                var args     = arguments,
-                    override = this.getSubOverride(args);
-
-                return (override) ? this[override].apply(this, args) : true;
-            }
-        },
-
-        getSubOverride: function (args) {
-            var host      = args[0],
-                overrides = host._yuievt.subOverrides,
-                method;
-
-            for (method in overrides) {
-                if (owns(overrides, method) &&
-                    overrides[method].apply(this, args)) {
-                    return method;
-                }
-            }
-
-            return null;
-        }
-    }
-}, {
-    subOverrides: {},
-    detachOverrides: {}
-});
-
-
-Y.before = function () {
-    return Y.Do.before.apply(Y.Do, arguments);
-};
-
-}, '0.0.1', { requires: ['oop'] });
+}, '', { requires: ['oop'] });
