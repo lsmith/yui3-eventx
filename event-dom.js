@@ -2,7 +2,7 @@ YUI.add('eventx-dom', function (Y) {
 
 var isArray = Y.Lang.isArray,
     toArray = Y.Array,
-    push    = Array.prototoype.push;
+    push    = Array.prototype.push;
 
 function DOMEventFacade(type, target, payload) {
     this._event = payload._event;
@@ -10,7 +10,7 @@ function DOMEventFacade(type, target, payload) {
     Y.EventFacade.apply(this, arguments);
 }
 
-DOMEventFacade.prototype = {
+Y.extend(DOMEventFacade, Y.EventFacade, {
     /**
     Get a property from the event's data collection supplied at event creation.
     Returns one of the following, in priority order:
@@ -103,7 +103,7 @@ DOMEventFacade.prototype = {
 
         return this;
     }
-};
+});
 
 // Y.Event is an EventTarget
 Y.Event = Y.mix(new Y.EventTarget(), {
@@ -124,7 +124,7 @@ Y.Event = Y.mix(new Y.EventTarget(), {
         if (!target) {
             return Y.config.win;
         } else if (typeof target === 'string') {
-            target = Y.Selector.queryAll(target);
+            target = Y.Selector.query(target);
 
             if (target.length === 1) {
                 return target[0];
@@ -168,7 +168,7 @@ Y.Event = Y.mix(new Y.EventTarget(), {
     },
 
     EventFacade: DOMEventFacade
-};
+}, true);
 
 Y.EventTarget.configure(Y.Event, null,
     // Base event is dynamic to allow for dynamic DOM subscriptions such as
@@ -186,7 +186,8 @@ Y.EventTarget.configure(Y.Event, null,
         subscribe: function (_, phase, args) {
             var events     = this.dynamicEvents,
                 // Avoid dynamic event routing for white listed DOM events
-                isDOMEvent = (Y.Node && Y.Node.NODE_EVENTS[args[0]]),
+                type       = args[0],
+                isDOMEvent = (Y.Node && Y.Node.NODE_EVENTS[type]),
                 capture    = (phase === 'capture'),
                 sub        = null,
                 i, len, type, target, subs, eventKey, needsDOMSub;
@@ -199,15 +200,19 @@ Y.EventTarget.configure(Y.Event, null,
                 }
             }
 
+            // Convert from arguments object to array
+            args   = toArray(args, 0, true);
             target = Y.Event._resolveTarget(args[2]);
             phase  = capture ? 'capture' : 'on';
 
             if (target && target.nodeType) {
-                eventKey  = Y.stamp(target) + ':' + type;
+                // Remove the target from args to allow thisObj and payload
+                // args to slide into their proper indices
+                args.splice(2, 1);
 
-                sub = new this.Subscription(Y.Event, args, phase, {
-                    eventKey: eventKey
-                });
+                eventKey = args[0] = Y.stamp(target) + ':' + type;
+
+                sub = new this.Subscription(Y.Event, args, phase);
 
                 subs = Y.Event._yuievt.subs;
 
@@ -229,9 +234,8 @@ Y.EventTarget.configure(Y.Event, null,
                     YUI.Env.add(target, type, Y.Event._handleEvent, capture);
                 }
             } else if (isArray(target)) {
-                type = args[0];
                 subs = [];
-                for (i = 0, len = target.length, i < len; ++i) {
+                for (i = 0, len = target.length; i < len; ++i) {
                     args[2] = target[i];
                     subs.push(this.subscribe(Y.Event, phase, args));
                 }
@@ -274,7 +278,7 @@ Y.EventTarget.configure(Y.Event, null,
                 }
             }
 
-            this._super.unsubscribe(target, args);
+            this._super.unsubscribe(Y.Event, args);
             // TODO: detach DOM subscriber when last subscriber is removed
         },
 
@@ -330,4 +334,4 @@ Y.EventTarget.configure(Y.Event, null,
         Event: DOMEventFacade
     });
 
-}, '0.0.1', { requires: [ 'eventx-core' ] });
+}, '0.0.1', { requires: [ 'eventx', 'selector' ] });
