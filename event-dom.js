@@ -1,592 +1,333 @@
 YUI.add('eventx-dom', function (Y) {
 
-var EventTarget = Y.EventTarget,
-    EventFacade = Y.EventFacade,
+var isArray = Y.Lang.isArray,
+    toArray = Y.Array,
+    push    = Array.prototoype.push;
 
-    isString  = Y.Lang.isString,
-    isArray   = Y.Lang.isArray,
-    toArray   = Y.Array,
-    YObject   = Y.Object,
-    getByPath = YObject.getValue,
+function DOMEventFacade(type, target, payload) {
+    this._event = payload._event;
 
-    bindings  = {},
-    getEl, setEl,
-    YEventDOM,
-    eventMgr;
-    
-function Subscription() {
-}
-
-Subscription.prototype = {
-};
-
-function DOMSubscription(target, type, capture) {
-}
-
-DOMSubscription.prototype = {
-};
-
-function DOMEventFacade() {
+    Y.EventFacade.apply(this, arguments);
 }
 
 DOMEventFacade.prototype = {
-};
-
-// Y.Event gets the EventTarget interface, but...
-Y.Event = {
-    _subs: {},
-
-    _events: {
-        // Base event is dynamic to allow for dynamic DOM subscriptions such as
-        // `Y.Event.on('click:li.expandable', callback, '.tree')`
-        '@BASE': new Y.CustomEvent('@BASE', {
-            //TODO: simplified method implementations, no phases
-            Event: DOMEventFacade,
-            Subscription: Subscription
-        }, Y.CustomEvent.DYNAMIC_BASE,
-
-        // Default event
-        '@DEFAULT': new Y.CustomEvent('@DEFAULT', {
-            subscribe: function (target, phase, args) {
-                // Avoid dynamic event routing for white listed DOM events
-                return (Y.Node && Y.Node.NODE_EVENTS[args[0]]) ?
-                    Y.Event.attach(args, (phase === 'capture')) :
-                    this._super.subscribe.apply(this, arguments);
-            },
-
-            unsubscribe: function (target, args) {
-                // TODO
-            },
-
-            // TODO: Remove these if they're not appropriate for the default event
-            Event: DOMEventFacade,
-            Subscription: Subscription
-        }, Y.CustomEvent.DYNAMIC_DEFAULT));
-    },
-
     /**
-    Publish a synthetic DOM event to add new events encapsulating common
-    subscription patterns or normalize browser inconsistencies. These events
-    can be subscribed to from Y.Nodes or Y.NodeLists, or using `Y.Event.on()`.
+    Get a property from the event's data collection supplied at event creation.
+    Returns one of the following, in priority order:
+    1. value returned from a `_getter` defined for the property
+    1. value of the property in the event's data collection, if present
+    1. value of the property on the originating DOM event, if present
+    1. value of the property on the event object itself
 
-    @method publish
-    @param {String|Object} type The name of the event to publish or a map of
-                                configs
-    @param {Object} [config] Behavioral extensions and overrides for this event
-    @param {CustomEvent} [inheritsFrom] Instead of deriving from the class's
-                            default event
+    @method get
+    @param {String} name Data property name
+    @return {Any} whatever is stored in the data property
     **/
-    publish: function (type, config, inheritsFrom) {
-        Y.EventTarget._publish(Y.Event, Y.Event._events,
-            type, config, inheritsFrom);
+    // TODO: node-event module to add _getter for target, currentTarget, and
+    // relatedTarget and deal with target possibly being a text node
+    get: function (name) {
+        if (this._getter[name]) {
+            return this._getter[name](name);
+        } else if (name in this.data) {
+            return this.data[name];
+        } else {
+            return (name in this._event) ? this._event[name] : this[name];
+        }
     },
 
     /**
-    Subscribe to a DOM event in the bubble phase. See `Y.Event._on()` if
-    you want to subscribe to the capture phase.
-    
-    _type_ may be a string identifying the event or an object map of types to
-    callback functions.
+    Disables any default behavior of the event.
 
-    Custom/Synthetic events may override the default subscription signature, but
-    by default the subscription signature will look like this:
-
-    ```
-    Y.Event.on(type, callback, target, thisObj, extraArg, ...exrtraArgN);
-    ```
-
-    _target_ is optional, but if provided may be a DOM element, array of DOM
-    elements, a Y.Node or Y.NodeList, or selector string. If not provided,
-    `Y.config.win` is used.
-
-    _thisObj_ is optional, and sets the _callback_'s `this` object. The default
-    `this` object in the callback is _target_. Arguments beyond _thisObj_ will
-    be passed to the callback after the event object.
-    
-    If no event published for this class or instance matches the type
-    string exactly, the default event behavior will be used.
-
-    @method on
-    @param {String} type event type to subcribe to
-    @param {Any*} sigArgs see above note on default signature
+    @method preventDefault
     @chainable
     **/
-    on: function (type) {
-        var event = Y.Event._events[type];
-
-        if (!event) {
-            if (typeof type === STRING) {
-                event = Y.Event._events[DEFAULT];
-            } else {
-                // Defer object/array syntax handling to subscribe()
-                return this.subscribe(toArray(arguments, 0, true));
-            }
-        }
-
-        event.subscribe(this, args);
+    preventDefault: function () {
+        this._prevented = true;
+        this._event.preventDefault();
+        this._event.returnValue = false;
 
         return this;
     },
 
     /**
-    Subscribe to a DOM event. This method allows capture phase subscriptions.
-    
-    _type_ may be a string identifying the event or an object map of types to
-    callback functions.
+    Stops the event from bubbling to subsequent bubble targets. All subscribers
+    on the current bubble target will be executed.
 
-    Custom/Synthetic events may override the default subscription signature, but
-    by default the subscription signature will look like this:
+    Does not prevent the event's default behavior or its `after()` subscribers
+    from being called.
 
-    ```
-    Y.Event._on([type, callback, target, thisObj, extraArg, ...exrtraArgN]);
-    ```
+    @method stopPropagation
+    @chainable
+    **/
+    stopPropagation: function () {
+        // It might have been stopped with 2 already
+        if (!this._stopped) {
+            this._stopped = 1;
+            this._event.stopPropagation();
+        }
 
-    _target_ is optional, but if provided may be a DOM element, array of DOM
-    elements, a Y.Node or Y.NodeList, or selector string. If not provided,
-    `Y.config.win` is used.
+        return this;
+    },
 
-    _thisObj_ is optional, and sets the _callback_'s `this` object. The default
-    `this` object in the callback is _target_. Arguments beyond _thisObj_ will
-    be passed to the callback after the event object.
-    
-    If no event published for this class or instance matches the type
-    string exactly, the default event behavior will be used.
-    
-    @method _on
-    @param {Any*} args see above note on default signature
-    @param {Boolean} capture Make the subscription in capture phase if possible
+    /**
+    Stops the event from bubbling to subsequent bubble targets and stops
+    notification of additional subscribers on the current bubble target.
+
+    Does not prevent the event's default behavior or its `after()` subscribers
+    from being called.
+
+    @method stopImmediatePropagation
+    @chainable
+    **/
+    stopImmediatePropagation: function () {
+        this._stopped = 2;
+        this._event.stopPropagation();
+
+        return this;
+    },
+
+    /**
+    Convenience function to do both `e.preventDefault()` and
+    `e.stopPropagation()`. Pass a truthy value as _immediate_ to
+    `e.stopImmediatePropagation()` instead.
+
+    @method halt
+    @param {Boolean} [immediate] Trigger `e.stopImmediatePropagation()`
+    @chainable
+    **/
+    halt: function (immediate) {
+        this._prevented = true;
+        this._stopped = immediate ? 2 : 1;
+        this._event.preventDefault();
+        this._event.stopPropagation();
+
+        return this;
+    }
+};
+
+// Y.Event is an EventTarget
+Y.Event = Y.mix(new Y.EventTarget(), {
+
+    /**
+    Resolves the input value to a DOM Element or array of DOM Elements.
+
+    If unsuccessful, `null` is returned.
+
+    If no target is passed, `Y.config.win` is returned.
+
+    @method _resolveTarget
+    @param {String|Node|NodeList|Element|Element[]}
+    @return {Element|Element[]}
     @protected
     **/
-    _on: function (args, capture) {
-        var type  = args[0],
-            event = Y.Event._events[type],
-            i, len;
-
-        if (!event) {
-            if (typeof type === STRING) {
-                event = Y.Event._events[DEFAULT];
-            } else if (isObject(type)) {
-                if (isArray(type)) {
-                    for (i = 0, len = type.length; i < len; ++i) {
-                        args[0] = type[i];
-                        Y.Event._on(args, capture);
-                    }
-                } else {
-                    for (event in type) {
-                        if (type.hasOwnProperty(event)) {
-                            args[0] = event;
-                            // Weak point, assumes signature includes callback
-                            // as third arg for the event (sorta).
-                            args[1] = type[event];
-                            Y.Event._on(args);
-                        }
-                    }
-                }
-
-                return this;
-            }
-        }
-
-        event.subscribe(this, args, capture);
-
-        return this;
-    },
-
-    /**
-    Create a DOM event subscription directly, bypassing any custom or synthetic
-    event logic that may be configured for an event name.
-
-    _args_ is expected to be an array containing:
-    * type (string) - name of the DOM event
-    * callback (function) - subscriber
-    * target (Element|Element[]|Node|NodeList|String) - optional, what to
-        subscribe to
-    * thisObj (object) - overrides `this` in the callback
-    * ...argN - any additional arguments to pass to the callback after the
-        event object.
-
-    @method attach
-    @param {Array} 
-    **/
-    attach: function (args, capture) {
-        var target = args[2],
-            type, callback, i, len, subs, args, eventKey;
-
+    _resolveTarget: function (target) {
         if (!target) {
-            target = Y.config.win;
+            return Y.config.win;
         } else if (typeof target === 'string') {
             target = Y.Selector.queryAll(target);
 
             if (target.length === 1) {
-                target = target[0];
-            } else if (target.length === 0) {
-                return null;
+                return target[0];
+            } else if (target.length > 1) {
+                return target;
             }
+        } else if (target.nodeType || (target[0] && target[0].nodeType)) {
+            return target;
         } else if (Y.Node) {
             if (target instanceof Y.Node) {
-                target = target._node;
+                return target._node;
             } else if (target instanceof Y.NodeList) {
-                target = target._nodes;
+                return target._nodes;
+            } else if (target[0] && target[0] instanceof Y.Node) {
+                return Y.all(target)._nodes;
             }
         }
 
-        // At last, we have a DOM node. Get on with the subscribing, already!
-        if (target.nodeType) {
-            subs     = Y.Event._subs;
-            type     = args[0];
-            eventKey = Y.stamp(target) + ':' + type;
-
-            if (capture) {
-                eventKey += ':capture';
-            }
-
-            if (!subs[eventKey]) {
-                subs[eventKey] =
-                    new Y.Event.DOMSubscription(target, type, capture);
-            }
-
-            return subs[eventKey].subscribe.apply(subs[eventKey], args);
-        } else if (isArray(target)) {
-            type = args[0];
-            subs = [];
-            for (i = 0, len = target.length, i < len; ++i) {
-                args[2] = target[i];
-                subs.push(Y.Event.attach(args, capture));
-            }
-
-            return new Y.Event.Subscription(args[0], null, subs);
+        if (isArray(target) && !target.length) {
+            return target;
         }
 
         return null;
     },
 
-    detach: function (type, callback) {
-        // TODO
+    /**
+    Routes a DOM event to the Notifier responsible for calling the DOM event
+    subscribers.
+
+    @method _handleEvent
+    @param {DOMEvent} e the native DOM event
+    **/
+    _handleEvent: function (e) {
+        // Inlined for old IE support rather than breaking out into submodule.
+        // The quantity of code just isn't worth it.
+        if (!e) {
+            e = event;
+        }
+
+        Y.Event.fire(e.type, e, this);
     },
 
-    Subscription: Subscription,
-
-    DOMSubscription: DOMSubscription
+    EventFacade: DOMEventFacade
 };
 
-}, true);
+Y.EventTarget.configure(Y.Event, null,
+    // Base event is dynamic to allow for dynamic DOM subscriptions such as
+    // `Y.Event.on('click:li.expandable', callback, '.tree')`
+    new Y.CustomEvent('@BASE', {
+        // TODO: simplified method implementations, no phases?
+        // TODO: Is this safe for synthetic events to have DOMEventFacade as
+        // this.Event? Maybe it should be a different facade.
+        Event: DOMEventFacade
+    }, Y.CustomEvent.DYNAMIC_BASE),
 
+    // Default event routes to Y.Event.attach for NODE_EVENTS and if there
+    // isn't a dynamic event to handle the subscription
+    {
+        subscribe: function (_, phase, args) {
+            var events     = this.dynamicEvents,
+                // Avoid dynamic event routing for white listed DOM events
+                isDOMEvent = (Y.Node && Y.Node.NODE_EVENTS[args[0]]),
+                capture    = (phase === 'capture'),
+                sub        = null,
+                i, len, type, target, subs, eventKey, needsDOMSub;
 
-
-
-function DOMEventFacade(type, target, payload) {
-    this._event = e;
-    this.data   = {};
-}
-Y.extend(DOMEventFacade, EventFacade, {
-    _getter: {
-        target: function () {
-            if (!this._target) {
-                var target = this._event.target;
-                while (target && target.nodeType === 3) {
-                    target = target.parentNode;
+            if (!isDOMEvent && events) {
+                for (i = 0, len = events.length; i < len; ++i) {
+                    if (events[i].test(target, args)) {
+                        return events[i].subscribe(target, phase, args);
+                    }
                 }
-                this._target = target;
             }
-            return this._target;
-        }
-    }),
 
-    _setter: {},
+            target = Y.Event._resolveTarget(args[2]);
+            phase  = capture ? 'capture' : 'on';
 
-    get: function (name) {
-        var val;
-        if (this._getter[name]) {
-            val = this._getter[name].call(this);
-        } else {
-            // Avoid read-only errors by overriding values in data and reading
-            // values from data, then fall back to _event
-            val = (name in this.data) ? this.data[name] : this._event[name];
-        }
+            if (target && target.nodeType) {
+                eventKey  = Y.stamp(target) + ':' + type;
 
-        return val;
-    }
-});
-Y.DOMEventFacade = DOMEventFacade;
+                sub = new this.Subscription(Y.Event, args, phase, {
+                    eventKey: eventKey
+                });
 
-// Manage map of HTML elements to avoid circular ref memory leak in IE
-(function () {
-    var elements = {};
+                subs = Y.Event._yuievt.subs;
 
-    getEl = function (yuid) {
-        return elements[yuid];
-    };
-    setEl = function (el) {
-        var yuid = Y.stamp(el);
-        elements[yuid] = el;
+                if (!subs[eventKey]) {
+                    needsDOMSub = true;
+                    subs[eventKey] = {};
+                }
 
-        return yuid;
-    };
-})();
+                subs = subs[eventKey];
 
-eventMgr = new EventTarget({
-    _DEFAULT: {
-        processArgs: function (args) {
-            args[3] = setEl(args[3]);
-        },
+                if (!subs[phase]) {
+                    needsDOMSub = true;
+                    subs[phase] = [];
+                }
 
-        generateSub: function (host, type, category, yuid, callback, thisObj) {
-            var sub = this.constructor.superclass
-                        .generateSub.apply(this, arguments);
+                subs[phase].push(sub);
 
-            thisObj = sub.thisObj;
-
-            sub.thisObj = (thisObj && thisObj.nodeType) ?
-                                setEl(thisObj) : (thisObj || yuid);
+                if (needsDOMSub) {
+                    YUI.Env.add(target, type, Y.Event._handleEvent, capture);
+                }
+            } else if (isArray(target)) {
+                type = args[0];
+                subs = [];
+                for (i = 0, len = target.length, i < len; ++i) {
+                    args[2] = target[i];
+                    subs.push(this.subscribe(Y.Event, phase, args));
+                }
+                // TODO return group sub
+            }
 
             return sub;
         },
 
-        on: function (host, sub) {
-            var abort = false,
-                type  = sub.type,
-                yuid  = sub.phase,
-                bindingId = type + '>' + yuid,
-                event;
+        unsubscribe: function (_, args) {
+            var events     = this.dynamicEvents,
+                // Avoid dynamic event routing for white listed DOM events
+                isDOMEvent = (Y.Node && Y.Node.NODE_EVENTS[args[0]]),
+                isSub      = (args[0].type && args[0].callback),
+                capture    = (args[2] === 'capture'),
+                i, len, target, phase;
 
-            if (this.fireOnce) {
-                event = getByPath(YEventDOM._fired, [type, yuid]);
-
-                if (event) {
-                    this.registerSub(host, sub);
-                    this.fire(host, type, yuid, event);
-                    abort = true;
-                }
-            } else {
-                if (!bindings[bindingId]) {
-                    bindings[bindingId] =
-                        YEventDOM.listen(yuid, type, function (e) {
-                            eventMgr.fire(type, yuid, e);
-                        });
-                }
-            }
-
-            return abort;
-        },
-
-        fire: function (host, type, yuid, e) {
-            var subs  = this.getSubs(host, type, null, yuid),
-                event = this.generateEvent(host, type, e),
-                args  = [event],
-                i, len, sub, thisObj;
-
-            for (i = 0, len = subs.length; i < len; ++i) {
-                sub = subs[i];
-                
-                if (event._stop < 2) {
-                    thisObj = (isString(sub.thisObj)) ?
-                                    getEl(sub.thisObj) : sub.thisObj;
-
-                    // Skip notification if thisObj refers to a node that
-                    // doesn't exist any more
-                    // TODO: test this
-                    if (thisObj) {
-                        event.currentTarget = getEl(sub.phase);
-
-                        if (sub.payload) {
-                            args = args.concat(sub.payload);
-                        }
-
-                        event.subscription = sub;
-
-                        sub.callback.apply(thisObj, args);
-                    }
-                }
-
-                if (this.fireOnce) {
-                    sub.detach();
-                }
-            }
-
-            if (event._stop) {
-                // TODO: what's the proper thisObj? and proper fallback thisObj?
-                this.stoppedFn.call(thisObj || host, event);
-            }
-
-            if (event._prevent && this.preventable) {
-                // TODO: what's the proper thisObj? and proper fallback thisObj?
-                this.preventedFn.call(thisObj || host, event);
-            }
-
-            if (this.fireOnce) {
-                pushByPath(YEventDOM._fired, [type, yuid], event);
-            }
-        },
-
-        generateEvent: function (host, type, e) {
-            return new this.Event(type, e);
-        },
-
-        Event: DOMEventFacade,
-
-        detach: function (host, sub) {
-            var subs = getByPath(host._yuievt.subs, [sub.type, sub.phase]),
-                type, yuid, bindingId, domBinding;
-
-            // detach is called before the subscription is unregistered, so
-            // check that the length is 1
-            if (subs && subs.length === 1) {
-                type = sub.type;
-                yuid = sub.phase;
-                bindingId = type + '>' + yuid;
-
-                domBinding = bindings[bindingId];
-                if (domBinding) {
-                    YEventDOM.unlisten(yuid, type, domBinding);
-                    delete bindings[bindingId];
-                }
-            }
-        }
-    }
-}),
-
-// TODO: This should probably just be Y.DOM augmentation
-YEventDOM = Y.namespace("EventX").DOM = {
-    listen: function (yuid, type, callback, phase) {
-        getEl(yuid).addEventListener(type, callback, !!phase);
-        return callback;
-    },
-
-    unlisten: function (yuid, type, callback, phase) {
-        var el = getEl(yuid);
-        el.removeEventListener(type, callback, !!phase);
-        return callback;
-    },
-
-    stop   : function (e) { e.stopPropagation(); },
-    prevent: function (e) { e.preventDefault(); },
-
-    _events: eventMgr,
-
-    _bindings: bindings,
-
-    _getEl: getEl,
-    _setEl: setEl,
-
-    // static method uses a different signature, with first parameter being
-    // the target element.
-    on: function (el, type, callback, thisObj) {
-        if (el && type) {
-            var args = toArray(arguments, 0, true),
-                i, len;
-
-            args[0] = type; // params reversed for more natural API
-            args[1] = el;
-
-            if (el.nodeType) {
-                eventMgr._subscribe(args);
-            } else if (isArray(el)) {
-                args.splice(0,2);
-                for (i = 0, len = el.length; i < len; ++i) {
-                    eventMgr._subscribe([type, el[i]].concat(args));
-                }
-            }
-        }
-
-        return YEventDOM;
-    },
-
-    detach: function (el, type, callback) {
-        if (el) {
-            if (el.detach) {
-                el.detach();
-            } else if (type) {
-                if (el.nodeType) {
-                    eventMgr.detach(type, Y.stamp(el), callback);
-                } else if (isArray(el)) {
-                    for (var i = 0, len = el.length; i < len; ++i) {
-                        eventMgr.detach(type, Y.stamp(el[i]), callback);
-                    }
-                }
-            } else {
-                YEventDOM.detachAll(el);
-            }
-        }
-
-        return YEventDOM;
-    },
-
-    detachAll: function (el) {
-        var types, subs, type, i, yuid;
-
-        if (el) {
-            yuid = Y.stamp(el);
-
-            types = eventMgr._yuievt.subs
-            for (type in types) {
-                if (types[type][yuid]) {
-                    subs = types[type][yuid];
-                    for (i = subs.length - 1; i >= 0; --i) {
-                        subs[i].detach();
+            if (!isSub && !isDOMEvent && events) {
+                for (i = 0, len = events.length; i < len; ++i) {
+                    if (events[i].test(target, args)) {
+                        return events[i].unsubscribe(Y.Event, args);
                     }
                 }
             }
-        }
 
-        return YEventDOM;
-    }
-};
+            // No dynamic event and not passed a Subscription instance to
+            // detach
+            if (!isSub) {
+                target   = Y.Event._resolveTarget(args[2]);
+                if (target && target.nodeType) {
+                    args[0] = Y.stamp(target) + ':' + args[0];
+                    args[2] = capture ? 'capture' : 'on';
+                } else if (isArray(target)) {
+                    for (i = 0, len = target.length; i < len; ++i) {
+                        args[2] = target[i];
+                        this.unsubscribe(Y.Event, args);
+                    }
 
-// DOM API has no notion of phases.
-YEventDOM.after = YEventDOM.subscribe = YEventDOM.on;
-
-
-// Add DOM event subscription to Y.on
-Y._yuievt.subOverrides.domSubscribe = function (host, sub) {
-    var thisObj = sub.thisObj;
-    if (thisObj) {
-        return thisObj.nodeType || isString(thisObj) ||
-            (isArray(thisObj) && thisObj.length && thisObj[0].nodeType);
-    }
-
-    return false;
-};
-
-Y._yuievt.detachOverrides.domDetach = function () {
-    // TODO
-};
-
-Y.publish({
-    type: '_DEFAULT',
-
-    domSubscribe: function (host, sub, type, category, _, callback, thisObj) {
-        var args = toArray(arguments, 5, true),
-            els;
-
-        // TODO: too much intelligence about TYPE_PATTERN
-        type = (sub.category) ? sub.category + '|' + sub.type : sub.type;
-        if (isString(thisObj)) {
-            els = (Y.Selector) ?
-                        Y.Selector.query(thisObj) :
-                        [Y.DOM.byId(thisObj)];
-
-            if (!els.length) {
-                args.unshift(type);
-                Y.on('available', function () {
-                    Y.on.apply(Y, args);
-                }, thisObj);
-                return true;
+                    return;
+                }
             }
-        } else {
-            els = toArray(thisObj);
-        }
 
-        args.unshift(els, type);
+            this._super.unsubscribe(target, args);
+            // TODO: detach DOM subscriber when last subscriber is removed
+        },
 
-        YEventDOM.on.apply(YEventDOM, args);
+        fire: function (_, type, e, currentTarget) {
+            var eventKey = Y.stamp(currentTarget) + ':' + type,
+                phase    = (e.eventPhase === 1) ? 'capture' : 'on',
+                subs     = Y.Event._yuievt.subs[eventKey],
+                event, i, len, sub, ret;
 
-        // return true to route the event without local subscription
-        return true;
-    },
+            if (subs && subs[phase] && subs[phase].length) {
+                event = new this.Event(type, (e.target || e.srcElement), {
+                    _event       : e,
+                    currentTarget: currentTarget
+                });
 
-    domDetach: function () {
-        // TODO
-    }
-});
+                subs = subs[phase];
+                // To be set using event.get('currentTarget');
+                currentTarget = null;
 
-}, '0.0.1', { requires: [ 'eventx-core' ], optional: [ 'eventx-available' ] });
+                for (i = 0, len = subs.length; i < len; ++i) {
+                    sub = subs[i];
+
+                    event.subscription = sub;
+
+                    if (sub.thisObj) {
+                        ret = sub.notify(event);
+                    } else {
+                        // Lazy evaluate the current target as the thisObj
+                        // for the subscription to avoid the function call and
+                        // potential getter cost to create a Node instance
+                        sub.thisObj = currentTarget ||
+                                (currentTarget = event.get('currentTarget'));
+
+                        sub.notify(event);
+
+                        sub.thisObj = null;
+                    }
+
+                    event.subscription = null;
+
+                    // Boy I hate this "feature"
+                    if (ret === false) {
+                        event.halt();
+                    }
+
+                    if (event._stopped === 2) {
+                        break;
+                    }
+                }
+            }
+        },
+
+        Event: DOMEventFacade
+    });
+
+}, '0.0.1', { requires: [ 'eventx-core' ] });
