@@ -110,7 +110,7 @@ function CustomEvent(type, config, inheritsFrom) {
     @type {CustomEvent}
     @default `Y.CustomEvent.prototype`
     **/
-    instance._super = inheritsFrom || CustomEvent.protototype;
+    instance._super = inheritsFrom || CustomEvent.prototype;
 
     // Override instance properties and methods from input config
     if (config) {
