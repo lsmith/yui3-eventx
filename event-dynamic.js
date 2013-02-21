@@ -1,3 +1,4 @@
+YUI.add('eventx-dynamic', function (Y) {
 /**
 Adds Y.CustomEvent.DYNAMIC_BASE and DYNAMIC_DEFAULT to be used as base and
 default events for classes that want support for publishing dynamic events.
@@ -33,6 +34,7 @@ to other events, possibly publishing them en route.
 @submodule event-dynamic
 @for CustomEvent
 **/
+var arrayIndex = Y.Array.indexOf;
 
 /**
 A base event that includes support for registering dynamic events if they are
@@ -94,3 +96,5 @@ Y.CustomEvent.DYNAMIC_DEFAULT = new Y.CustomEvent('@DEFAULT', {
         return this._super.subscribe.apply(this, arguments);
     }
 });
+
+}, '', { requires: [ 'eventx' ] });
