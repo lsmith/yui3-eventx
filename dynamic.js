@@ -92,5 +92,5 @@ Y.CustomEvent.DYNAMIC_DEFAULT = new Y.CustomEvent('@DEFAULT', {
 
         // No dynamic event, defer to the base event subscription logic
         return this._super.subscribe.apply(this, arguments);
-    },
+    }
 });

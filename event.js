@@ -128,6 +128,17 @@ function CustomEvent(type, config, inheritsFrom) {
     return instance;
 }
 
+/**
+Class to encapsulate custom event subscriptions. This is also assigned to the
+`CustomEvent.prototype` for individual event overrides, but provided statically
+for subclassing.
+
+@property Subscription
+@type {Function}
+@static
+**/
+CustomEvent.Subscription = Subscription;
+
 CustomEvent.prototype = {
     /**
     The class constructor for subscriptions to this event.  Unless the
@@ -581,7 +592,7 @@ function Subscription(target, args, phase, details) {
 
     this.type     = args[0];
     this.callback = args[1];
-    this.thisObj  = args[2] || target;
+    this.thisObj  = args[2];
 
     if (args.length > 3) {
         this.payload = slice.call(args, 3);
@@ -598,17 +609,18 @@ Subscription.prototype = {
     @param {EventFacade} e The event object to pass as first arg to the callback
     **/
     notify: function (e) {
-        var args;
-        
+        var thisObj = this.thisObj || this.target,
+            args;
+
         // Avoid extra work if the subscription didn't bind additional callback
         // args.
         if (this.payload) {
             args = [e];
             push.apply(args, this.payload);
 
-            this.callback.apply(this.thisObj, args);
+            this.callback.apply(thisObj, args);
         } else {
-            this.callback.call(this.thisObj, e);
+            this.callback.call(thisObj, e);
         }
     },
 
@@ -647,7 +659,6 @@ function EventFacade(type, target, payload) {
     this.data.target  = target;
     this.data.details = payload;
 }
-function fromProperty(name) { return this[name]; }
 EventFacade.prototype = {
     /**
     Collection of getters to apply special logic to accessing certain data
@@ -658,9 +669,7 @@ EventFacade.prototype = {
     @type {Object}
     @protected
     **/
-    _getter: {
-        type: fromProperty
-    },
+    _getter: {},
 
     /**
     Collection of setters to apply special logic to assigning certain data
@@ -721,7 +730,10 @@ EventFacade.prototype = {
     @chainable
     **/
     stopPropagation: function () {
-        this._stopped = 1;
+        // It might have been stopped with 2 already
+        if (!this._stopped) {
+            this._stopped = 1;
+        }
 
         return this;
     },
@@ -781,9 +793,11 @@ EventFacade.prototype = {
     @return {Any} whatever is stored in the data property
     **/
     get: function (name) {
-        return (this._getter[name]) ?
-            this._getter[name](name) :
-            this.data[name];
+        if (this._getter[name]) {
+            return this._getter[name](name);
+        } else {
+            return (name in this.data) ? this.data[name] : this[name];
+        }
     },
 
     /**
@@ -817,7 +831,9 @@ Augmentation class or superclass to add event related API methods.
 function EventTarget() {
     this._yuievt = {
         subs      : {},
-        events    : proto(this.constructor.events || {}),
+        events    : this.constructor.events ?
+                        proto(this.constructor.events) :
+                        {},
         // TODO: Can this be moved to event behavior?
         bubblePath: []
     };
