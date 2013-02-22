@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+    <title>Test Page</title>
+</head>
+<body class="yui3-skin-sam">
+<h3>Y.all('.x').on('click', prevent) - Prevent links except FB</h3>
+<ul>
+    <li><a href="http://yahoo.com" class="x">Yahoo</a></li>
+    <li><a href="http://google.com" class="x">Google</a></li>
+    <li><a href="http://facebook.com" class="y">Facebook</a></li>
+    <li><a href="http://twitter.com" class="x">Twitter</a></li>
+</ul>
+
+<h3>node.on('click', incrementThenDetach)</h3>
+<button id="increment">Now helping #<span>0</span></button>
+
+<h3>override <code>this</code> and pass sub args</h3>
+<ul>
+    <li>All defaults <button id="name">My name is <span>button</span></button></li>
+    <li>this: { tagName: 'Fred' } <button id="thisOverride">My name is <span>button</span></button></li>
+    <li>args: 'Fred', true <button id="args">My name is <span>button</span></button></li>
+    <li>this: { tagName: 'Angie' }, args: true, 'Good' <button id="thisAndArgs">My name is <span>button</span></button></li>
+</ul>
+
+<script src="http://yui.yahooapis.com/3.8.1/build/yui/yui.js"></script>
+<script src="event.js"></script>
+<script src="event-dom.js"></script>
+<script src="event-node.js"></script>
+<script>
+YUI({
+    filter: 'raw'
+}).use('eventx-node', function (Y) {
+
+//var node = document.getElementById('x');
+
+Y.all('.x').on("click", function (e) {
+    console.log("Treasure node clicked!", e);
+    e.preventDefault();
+    //e.detach();
+}, '.x');
+
+Y.one('#increment').on('click', function (e) {
+    var counter = this.one('span')._node;
+
+    counter.innerHTML = (+counter.innerHTML) + 1;
+
+    e.detach();
+});
+
+Y.one('#name').on('click', function (e) {
+    e.get('currentTarget').one('span')._node.innerHTML = this.get('tagName');
+});
+
+Y.one('#thisOverride').on('click', function (e) {
+    e.get('currentTarget').one('span')._node.innerHTML = this.tagName;
+}, { tagName: 'Fred' });
+
+Y.one('#args').on('click', function (e, name, bool) {
+    e.get('currentTarget').one('span')._node.innerHTML = 
+        name + (bool ? '!' : ' :(');
+}, null, 'Fred', true);
+
+Y.one('#thisAndArgs').on('click', function (e, bool, lastName) {
+    e.get('currentTarget').one('span')._node.innerHTML = 
+        this.tagName + ' ' + lastName + (bool ? '!' : ' :(');
+}, { tagName: 'Angie' }, true, 'Good');
+
+});
+</script>
+</body>
+</html>
