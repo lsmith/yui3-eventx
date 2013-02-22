@@ -304,7 +304,7 @@ CustomEvent.prototype = {
                 this.stoppedFn.call(target, event);
             }
 
-            if (event._prevented this.preventedFn) {
+            if (event._prevented && this.preventedFn) {
                 this.preventedFn.call(target, event);
             }
         }
@@ -611,7 +611,7 @@ to other events, possibly publishing them en route.
 @type {CustomEvent}
 @static
 **/
-CustomEvent.DYNAMIC_BASE = new Y.CustomEvent('@BASE', {
+CustomEvent.DYNAMIC_BASE = new CustomEvent('@BASE', {
     publish: function (target) {
         var events, defaultEvent;
 
@@ -660,7 +660,7 @@ to other events, possibly publishing them en route.
 @property DEFAULT_EVENT
 @type {CustomEvent}
 **/
-CustomEvent.DYNAMIC_DEFAULT = new Y.CustomEvent('@DEFAULT', {
+CustomEvent.DYNAMIC_DEFAULT = new CustomEvent('@DEFAULT', {
     subscribe: function (target, phase, args) {
         var events = this.dynamicEvents,
             event, i, len;
