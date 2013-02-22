@@ -497,16 +497,22 @@ CustomEvent.prototype = {
     @return {boolean} false (prevents formal subscription)
     **/
     immediate: function (target, phase, args) {
-        var event = this._firedWith;
+        var event = this._firedWith,
+            details, sub;
 
         if (event._stopped < 2 && (phase !== AFTER || !event._prevented)) {
-            // Note: parseSignature and new Subscription are not done because
-            // no subscription is being added, so e.detach() should be a no-op.
+            details = this.parseSignature && this.parseSignature(args);
+            sub     = new this.Subscription(target, args, phase, details);
+
             event.data.currentTarget = target;
+
             sub.notify(event);
+
+            event.data.currentTarget = null;
         }
 
-        // No subscription is created
+        // TODO: Should I return the sub if it was created, even though it
+        // doesn't get stored?
         return null;
     },
 
@@ -535,7 +541,7 @@ CustomEvent.prototype = {
             type  = sub.type;
             phase = sub.phase;
 
-            subs = allSubs[type][type];
+            subs = allSubs[type][phase];
             for (i = subs.length - 1; i >= 0; --i) {
                 if (subs[i] === sub) {
                     subs.splice(i, 1);
