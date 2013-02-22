@@ -343,11 +343,6 @@ CustomEvent.prototype = {
     @return {Boolean}
     **/
     hasSubs: function (path, type) {
-        // TODO: This returns a false positive if all subscribers have been
-        // detached because detach() only splices from the phase array. I'm
-        // guessing this is an edge case and not worth the code overhead to
-        // handle for now. I'm sure that's a fanciful thought, and I will be
-        // proven wrong.
         for (var i = 0, len = path.length; i < len; ++i) {
             if (path[i]._yuievt.subs[type]) {
                 return true;
@@ -525,9 +520,9 @@ CustomEvent.prototype = {
     @param {Array} args Arguments passed to `detach(..)`
     **/
     unsubscribe: function (target, args) {
-        var type = args[0],
-            subs = target._yuievt.subs,
-            i, phase, abort;
+        var type    = args[0],
+            allSubs = target._yuievt.subs,
+            i, subs, sub, phase, abort, cleanup;
 
         // Custom detach() can return truthy value to abort the unsubscribe
         if (this.detach && this.detach.apply(this, args)) {
@@ -536,15 +531,19 @@ CustomEvent.prototype = {
 
         if (type.type && type.callback && type.phase) {
             // Use case: detach(sub);
-            subs = subs[type.type][type.phase];
+            sub   = type;
+            type  = sub.type;
+            phase = sub.phase;
+
+            subs = allSubs[type][type];
             for (i = subs.length - 1; i >= 0; --i) {
-                if (subs[i] === type) {
+                if (subs[i] === sub) {
                     subs.splice(i, 1);
                     break;
                 }
             }
-        } else if (subs[type]) {
-            subs     = subs[type];
+        } else if (allSubs[type]) {
+            subs     = allSubs[type];
             callback = args[1];
             phase    = args[2];
 
@@ -560,12 +559,35 @@ CustomEvent.prototype = {
                     }
                 } else {
                     // Use case: detach(type, null, phase)
-                    subs[phase] = [];
+                    subs[phase] = null;
                 }
             } else {
                 // Use case: detach(type, callback) or detach(type)
                 this.unsubscribe(target, [type, callback, BEFORE]);
                 this.unsubscribe(target, [type, callback, AFTER]);
+            }
+        }
+
+        // Prune empty subscriber collections
+        if (type && phase) {
+            subs = allSubs[type];
+
+            if (!subs[phase].length) {
+                // This allows hasSubs to avoid returning false positives
+                subs[phase] = null;
+
+                cleanup = true;
+                for (phase in subs) {
+                    if (subs.hasOwnProperty(phase) && subs[phase]) {
+                        // Still has subs
+                        cleanup = false;
+                        break;
+                    }
+                }
+
+                if (cleanup) {
+                    allSubs[type] = null;
+                }
             }
         }
     }
@@ -589,8 +611,10 @@ CustomEvent.Subscription = Subscription;
 // widely useful.
 /**
 A base event that includes support for registering dynamic events if they are
-published with a `config.test(target, args)` method or `config.pattern`
-regex to match against the event type string.
+published with a `config.test(target, args, method)` method or `config.pattern`
+regex to match against the event type string. _method_ is the event method name
+that's calling `test()`, such as "subscribe" or "unsubscribe", to allow the
+test logic to fork for the appropriate signature in _args_ if necessary.
 
 Dynamic events are not bound to a specific event name, but use a `test()`
 method to determine if they can appropriately handle a subscription. Two
@@ -622,6 +646,9 @@ CustomEvent.DYNAMIC_BASE = new CustomEvent('@BASE', {
         }
 
         if (this.test) {
+            // Hack city. Dynamic events need to be collected on the event
+            // that will reference them rather than on an instance or class
+            // because publish could be on the instance or class.
             events = typeof target === 'function' ?
                         target.events :
                         target._yuievt.events;
@@ -662,19 +689,27 @@ to other events, possibly publishing them en route.
 **/
 CustomEvent.DYNAMIC_DEFAULT = new CustomEvent('@DEFAULT', {
     subscribe: function (target, phase, args) {
+        var event = this.getDynamicEvent(target, args, 'subscribe');
+
+        return event ?
+            event.subscribe(target, phase, args) :
+            // No dynamic event, defer to the base event subscription logic
+            this._super.subscribe.apply(this, arguments);
+    },
+
+    getDynamicEvent: function (target, args, method) {
         var events = this.dynamicEvents,
-            event, i, len;
+            i, len;
 
         if (events) {
             for (i = 0, len = events.length; i < len; ++i) {
-                if (events[i].test(target, args)) {
-                    return events[i].subscribe(target, phase, args);
+                if (events[i].test(target, args, method)) {
+                    return events[i];
                 }
             }
         }
 
-        // No dynamic event, defer to the base event subscription logic
-        return this._super.subscribe.apply(this, arguments);
+        return null;
     }
 });
 
