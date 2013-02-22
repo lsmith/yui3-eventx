@@ -528,24 +528,35 @@ CustomEvent.prototype = {
     unsubscribe: function (target, args) {
         var type    = args[0],
             allSubs = target._yuievt.subs,
-            i, subs, sub, phase, abort, cleanup;
+            i, len, subs, sub, phase, abort, cleanup;
 
         // Custom detach() can return truthy value to abort the unsubscribe
         if (this.detach && this.detach.apply(this, args)) {
             return;
         }
 
-        if (type.type && type.callback && type.phase) {
+        // TODO: switch to duck typing on type.detach?
+        if (type instanceof Subscription) {
             // Use case: detach(sub);
-            sub   = type;
-            type  = sub.type;
-            phase = sub.phase;
+            if (type.subs) {
+                for (i = 0, len = type.subs.length; i < len; ++i) {
+                    if (type.subs[i] && type.subs[i].detach) {
+                        type.subs[i].detach();
+                    }
+                }
+            } else {
+                sub    = type;
+                type   = sub.type;
+                phase  = sub.phase;
+                subs   = allSubs[type] && allSubs[type][phase];
 
-            subs = allSubs[type][phase];
-            for (i = subs.length - 1; i >= 0; --i) {
-                if (subs[i] === sub) {
-                    subs.splice(i, 1);
-                    break;
+                if (subs) {
+                    for (i = subs.length - 1; i >= 0; --i) {
+                        if (subs[i] === sub) {
+                            subs.splice(i, 1);
+                            break;
+                        }
+                    }
                 }
             }
         } else if (allSubs[type]) {
@@ -947,7 +958,7 @@ EventFacade.prototype = {
     @chainable
     **/
     detach: function () {
-        if (this.subscription) {
+        if (this.subscription && this.subscription.detach) {
             this.subscription.detach();
         }
 
@@ -966,7 +977,7 @@ EventFacade.prototype = {
     **/
     get: function (name) {
         if (this._getter[name]) {
-            return this._getter[name](name);
+            return this._getter[name].call(this, name);
         } else {
             return (name in this.data) ? this.data[name] : this[name];
         }
@@ -1455,14 +1466,11 @@ EventTarget.prototype = {
             event;
 
         if (type) {
-            // detach batch subscription
-            if (type.detach && !type.type) {
-                type.detach();
-            } else {
-                // type.type to support detach(sub)
-                event = events[type.type] || events[type] || events[DEFAULT];
-                event.unsubscribe(this, arguments);
-            }
+            // type.detach indicates detach(sub)
+            event = (type.detach ? events[type.type] : events[type]) ||
+                    events[DEFAULT];
+
+            event.unsubscribe(this, arguments);
         } else {
             this.detachAll();
         }
