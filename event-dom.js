@@ -250,18 +250,20 @@ Y.Event.publish({
 
             // DOM event subscription
             // Convert from arguments object to array
-            args  = toArray(args, 0, true);
-            el    = Y.Event._resolveTarget(args[2]);
+            args = toArray(args, 0, true);
+            el = Y.Event._resolveTarget(target === Y.Event ? args[2] : target);
             phase = capture ? 'capture' : 'on';
 
             if (el && el.nodeType) {
                 // Remove the target from args to allow thisObj and payload
                 // args to slide into their proper indices
-                args.splice(2, 1);
+                if (target === Y.Event) {
+                    args.splice(2, 1);
+                }
 
                 eventKey = args[0] = Y.stamp(el) + ':' + type;
 
-                sub = new this.Subscription(Y.Event, args, phase);
+                sub = new this.Subscription(target, args, phase);
 
                 subs = Y.Event._yuievt.subs;
 
@@ -344,11 +346,18 @@ Y.Event.publish({
             }
         },
 
-        fire: function (_, type, e, currentTarget) {
-            var eventKey = Y.stamp(currentTarget) + ':' + type,
-                phase    = (e.eventPhase === 1) ? 'capture' : 'on',
-                subs     = Y.Event._yuievt.subs[eventKey],
-                event, i, len, sub, ret;
+        fire: function (target, type, e, currentTarget) {
+            var subs = target._yuievt.subs[type],
+                eventKey, phase, event, i, len, sub, ret;
+
+            // custom event subscriptions
+            if (subs) {
+                return this._super.fire.apply(this, arguments);
+            }
+
+            eventKey = Y.stamp(currentTarget) + ':' + type;
+            phase    = (e.eventPhase === 1) ? 'capture' : 'on';
+            subs     = Y.Event._yuievt.subs[eventKey];
 
             if (subs && subs[phase] && subs[phase].length) {
                 event = new this.Event(type, (e.target || e.srcElement), {
