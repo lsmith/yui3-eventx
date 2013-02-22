@@ -37,8 +37,6 @@ Opportunities:
 5) unify delegation approach
 6) add support for static definition of events with defaultFn, etc
 7) add support for dynamic event types - e.g. input.on('key(shift+enter)', fn)
-8) move toward deprecating detach handle in favor of categories and chainable
-   on(..)
 
 
 Goals:
@@ -47,12 +45,11 @@ Goals:
   lifecycle method
 * create as few objects as possible
     - events are statically defined by default, but allow instance.publish(..)
-    - classes host a default event definition to handle 
+    - classes host a default event definition to handle unpublished events
 * do as little hard coded logic forking as possible
     - prefer logic routing through extendable object hashes of functions
 * be as compatible with the current consumer contract as is reasonable/possible
 * reduce the core code footprint
-* provide a functional core with no browser normalization, then add this via submodul e in such a way that it doesn't (notably) impact the performance
 * add as few supporting methods as possible to public APIs
 
 
@@ -73,48 +70,32 @@ Approach:
    for unknown event types.  Other events on the object can then proto-wrap
    (Y.Object) this default definition so they only need to define where the
    event's behavior differs from the default.
-8) add support for init and destroy for all events at the API level
-9) add subscribe(phase, type, *) method to the API, where phase is something
+8) add subscribe(type, phase, *) method to the API, where phase is something
    like "before" or "after" - instance.on(type, fn) is equivalent to
-   instance.subscribe("before", type, fn)
-10) limit the API's understanding of method signatures to type and phase.  The
-    rest of the signature is processed by the event definition methods
-11) the events that pertain to a class and the default event definition are stored statically on the class.  E.g.
-MyClass._events = {
-    events: {
-        start: { /* overrides for "start" event */ },
-        ...
-    },
-    defaultEvent: { /* default definitions */ }
-}
-12) instantiation consists of setting up the instance's _evt property.  This object looks like this:
-this._evt = {
-    events: Y.Object(this.constructor._events.events),
-    defaultEvent: this.constructor._events.defaultEvent,
-    bubblePath: [this, /* entries from constructor's bubblePath */ ],
+   instance.subscribe(type, "before", fn)
+9) limit the API's understanding of method signatures to type and phase.  The
+   rest of the signature is processed by the event definition methods
+10) the events that pertain to a class and the default event definition are
+    defined statically on the class using Y.EventTarget.configure(). E.g.
+Y.EventTarget.configure(MyClass, {
+    start: { /* overrides for "start" event */ },
+    ...
+},
+{ /* base event overrides or CustomEvent instance */ },
+{ /* default event overrides or CustomEvent instance */ });
+12) instantiation consists of setting up the instance's _yuievt property.  This
+    object looks like this:
+this._yuievt = {
     subs: {},
-    ... // other event state and reference maps
+    events: Y.Object(this.constructor.events)
 }
     
 The constructor's events object is proto-wrapped on the instance to facilitate instance based event publishing.
 
 
-Basic order of operations/logic flow:
-1) instance.on(type, fn) executes instance._subscribe(['before',type,fn])
-2) this method calls getEvent(type) to fetch the appropriate event definition
-   from the _evt.events collection, falling back to the default event.
-3) _subscribe then calls eventDef.init(..) if this is the first subscription*
-4) the return value from this indicates whether to abort or continue the
-   subscription
-5) If continue, eventDef.subscribe(..) is called, again returning an
-   abort/continue boolean*
-6) If continue, the subscription is registered
-
-* Each method receives as params the calling instance, the pending subscription
-* object, and any additional args passed to on/after/subscribe beyond the phase
-* and type (e.g. the callback function, thisObj, and extra args to pass the
-* subscribers on firing).
-
+/****************************************************************************/
+/*** From here down, the information is out of date and likely inaccurate ***/
+/****************************************************************************/
 
 DOM subscriptions:
 To facilitate DOM event subscriptions via the Node interface, Y.Node is given a
