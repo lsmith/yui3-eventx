@@ -209,11 +209,15 @@ CustomEvent.prototype = {
 
                 // target._yuievt.subs.foo.before.push(sub)
                 subs.push(sub);
+            } else if (abort.detach) {
+                // Allow on() to return an alternate Subscription.
+                // It is assumed that this subscription was registered on the
+                // appropriate target.
+                sub   = abort;
+                abort = false;
             }
         }
 
-        // TODO: worth it? target.on() is chainable, so this isn't made easily
-        // available.
         return abort ? null : sub;
     },
 
@@ -281,19 +285,26 @@ CustomEvent.prototype = {
     @param args* {any} additional args passed `fire(type, _here_...)`
     **/
     fire: function (target, type) {
-        var path    = this.bubbles && target._yuievt.bubblePath.length ?
+        var path    = target._yuievt.bubblePath && this.bubbles ?
                         this.resolveBubblePath(target) :
                         [target],
             hasSubs = this.hasSubs(path, type),
             event, payload;
 
-        if (this.defaultFn || hasSubs || (this.fireOnce && !this._firedWith)) {
-            if (arguments.length > 2) {
-                payload = toArray(arguments, 2, true);
-            }
-
-            event = new this.Event(type, target, payload);
+        // Only proceed if:
+        // * there are subscribers, OR
+        // * it's a fireOnce event that hasn't been fired, OR
+        // * it has a defaultFn, but isn't a fireOnce event that has already
+        //   been fired
+        if (!hasSubs && (this._firedWith || !this.defaultFn)) {
+            return;
         }
+
+        if (arguments.length > 2) {
+            payload = toArray(arguments, 2, true);
+        }
+
+        event = new this.Event(type, target, payload);
 
         if (hasSubs) {
             // on() subscribers
@@ -304,28 +315,28 @@ CustomEvent.prototype = {
                 this.stoppedFn.call(target, event);
             }
 
-            if (event._prevented) {
-                this.preventedFn && this.preventedFn.call(target, event);
-            } else {
-                if (this.defaultFn) {
-                    this.defaultFn.call(target, event);
-                }
-
-                // after() subscribers. defaultFn can stopImmediatePropagation()
-                // to abort notifying them.
-                if (event._stopped !== 2) {
-                    // TODO: Reverse path? I'm going with "no" as a default.
-                    this.notify(path, event, AFTER);
-                }
+            if (event._prevented this.preventedFn) {
+                this.preventedFn.call(target, event);
             }
-        } else if (this.defaultFn) {
+        }
+
+        if (this.defaultFn && !event._prevented) {
             this.defaultFn.call(target, event);
         }
 
-        // Reroute subscribe to immediate for fireOnce configurations.  This
-        // creates a derived event definition on the instance to prevent
-        // modifying a shared event definition.  See `immediate`.
+        // after() subscribers. defaultFn can stopImmediatePropagation()
+        // to abort notifying them.
+        if (hasSubs && event._stopped !== 2) {
+            // TODO: Reverse path? I'm going with "no" as a default.
+            this.notify(path, event, AFTER);
+        }
+
         if (this.fireOnce && !this._firedWith) {
+            // Clear subscribers
+            target._yuievt.subs[type] = null;
+
+            // Republish the event on the instance, rerouting subscribe to
+            // `immediate`
             target.publish(type, {
                 subscribe : this.immediate,
                 // cache the event it was initially fired with
@@ -346,7 +357,8 @@ CustomEvent.prototype = {
         // TODO: This returns a false positive if all subscribers have been
         // detached because detach() only splices from the phase array. I'm
         // guessing this is an edge case and not worth the code overhead to
-        // handle for now.
+        // handle for now. I'm sure that's a fanciful thought, and I will be
+        // proven wrong.
         for (var i = 0, len = path.length; i < len; ++i) {
             if (path[i]._yuievt.subs[type]) {
                 return true;
@@ -358,7 +370,7 @@ CustomEvent.prototype = {
 
     /**
     Flattens the bubble path for a given root instance.  Flattens using a
-    breadth-first algo, so given the following bubble structure:
+    breadth-first algorithm, so given the following bubble structure:
     ```
     . (D)  (E)   (D)  (F)
     .    \  |     |  /
@@ -509,6 +521,9 @@ CustomEvent.prototype = {
             event.data.currentTarget = target;
             sub.notify(event);
         }
+
+        // No subscription is created
+        return null;
     },
 
     /**
@@ -586,16 +601,22 @@ _args_ is expected to be an array containing:
     method if it has one defined
 **/
 function Subscription(target, args, phase, details) {
-    this.target   = target;
-    this.phase    = phase;
-    this.details  = details;
+    // Ew, but convenient to have Subscription support wrapping a batch of
+    // subscriptions
+    if (args) {
+        this.target   = target;
+        this.phase    = phase;
+        this.details  = details;
 
-    this.type     = args[0];
-    this.callback = args[1];
-    this.thisObj  = args[2];
+        this.type     = args[0];
+        this.callback = args[1];
+        this.thisObj  = args[2];
 
-    if (args.length > 3) {
-        this.payload = slice.call(args, 3);
+        if (args.length > 3) {
+            this.payload = slice.call(args, 3);
+        }
+    } else if (isArray(target)) {
+        this.subs = target;
     }
 }
 
@@ -631,7 +652,19 @@ Subscription.prototype = {
     @method detach
     **/
     detach: function () {
-        this.target.detach(this);
+        var sub, i, len;
+
+        if (this.subs) {
+            for (i = 0, len = this.subs.length; i < len; ++i) {
+                sub = this.subs[i];
+
+                if (sub && sub.detach) {
+                    sub.detach();
+                }
+            }
+        } else {
+            this.target.detach(this);
+        }
     }
 };
 
@@ -777,7 +810,9 @@ EventFacade.prototype = {
     @chainable
     **/
     detach: function () {
-        this.subscription && this.subscription.detach();
+        if (this.subscription) {
+            this.subscription.detach();
+        }
 
         return this;
     },
@@ -829,13 +864,11 @@ Augmentation class or superclass to add event related API methods.
 @constructor
 **/
 function EventTarget() {
+    var events = this.constructor.events;
+
     this._yuievt = {
-        subs      : {},
-        events    : this.constructor.events ?
-                        proto(this.constructor.events) :
-                        {},
-        // TODO: Can this be moved to event behavior?
-        bubblePath: []
+        subs  : {},
+        events: events ? proto(events) : {}
     };
 }
 
@@ -1066,7 +1099,7 @@ EventTarget.prototype = {
     @method on
     @param {String} type event type to subcribe to
     @param {Any*} sigArgs see above note on default signature
-    @chainable
+    @return {Subscription}
     **/
     on: function (type) {
         var event = this._yuievt.events[type],
@@ -1083,9 +1116,7 @@ EventTarget.prototype = {
             }
         }
 
-        event.subscribe(this, BEFORE, args);
-
-        return this;
+        return event.subscribe(this, BEFORE, args);
     },
 
     /**
@@ -1115,7 +1146,7 @@ EventTarget.prototype = {
     @method after
     @param {String} type event type to subcribe to
     @param {Any*} sigArgs see above note on default signature
-    @chainable
+    @return {Subscription}
     **/
     after: function (type) {
         var event = this._yuievt.events[type],
@@ -1132,9 +1163,7 @@ EventTarget.prototype = {
             }
         }
 
-        event.subscribe(this, AFTER, args);
-
-        return this;
+        return event.subscribe(this, AFTER, args);
     },
 
     /**
@@ -1165,22 +1194,22 @@ EventTarget.prototype = {
     @param {String} type {String} event type to subcribe to
     @param {String} phase {String} event phase to attach subscription
     @param {Any*} sigArgs see above note on default signature
-    @chainable
+    @return {Subscription}
     **/
     subscribe: function (type, phase) {
         var event = this._yuievt.events[type],
             args  = toArray(arguments, 0, true),
-            i, len;
+            i, len, subs;
 
         if (!event) {
             if (typeof type === STRING) {
                 event = this._yuievt.events[DEFAULT];
             } else if (isObject(type)) {
-
+                subs = [];
                 if (isArray(type)) {
                     for (i = 0, len = type.length; i < len; ++i) {
                         args[0] = type[i];
-                        this.subscribe.apply(this, args);
+                        subs.push(this.subscribe.apply(this, args));
                     }
                 } else {
                     for (event in type) {
@@ -1189,21 +1218,20 @@ EventTarget.prototype = {
                             // Weak point, assumes signature includes callback
                             // as third arg for the event (sorta).
                             args[2] = type[event];
-                            this.subscribe.apply(this, args);
+                            subs.push(this.subscribe.apply(this, args));
                         }
                     }
                 }
 
-                return this;
+                // Batch Subscription
+                return new Y.CustomEvent.Subscription(subs);
             }
         }
 
         // Remove phase from args array. It's passed separately
         args.splice(1, 1);
 
-        event.subscribe(this, phase, args);
-
-        return this;
+        return event.subscribe(this, phase, args);
     },
 
     /**
@@ -1295,9 +1323,14 @@ EventTarget.prototype = {
             event;
 
         if (type) {
-            // type.type to support detach(sub)
-            event = events[type.type] || events[type] || events[DEFAULT];
-            event.unsubscribe(this, arguments);
+            // detach batch subscription
+            if (type.detach && !type.type) {
+                type.detach();
+            } else {
+                // type.type to support detach(sub)
+                event = events[type.type] || events[type] || events[DEFAULT];
+                event.unsubscribe(this, arguments);
+            }
         } else {
             this.detachAll();
         }
@@ -1348,8 +1381,12 @@ EventTarget.prototype = {
     @chainable
     **/
     addTarget: function (target) {
-        if (arrayIndex(this._yuievt.bubblePath, target) === -1) {
-            this._yuievt.bubblePath.push(target);
+        var path = this._yuievt.bubblePath;
+
+        if (!path) {
+            this._yuievt.bubblePath = [target];
+        } else if (arrayIndex(path, target) === -1) {
+            path.push(target);
         }
 
         return this;
