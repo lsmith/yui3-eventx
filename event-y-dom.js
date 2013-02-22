@@ -52,4 +52,4 @@ Y.publish('@dom', {
     }
 });
 
-}, '', { requires: [ 'eventx-y', 'eventx-dom' ] });
+}, '', { requires: [ 'eventx', 'eventx-dom' ] });
