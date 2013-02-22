@@ -960,11 +960,9 @@ Augmentation class or superclass to add event related API methods.
 @constructor
 **/
 function EventTarget() {
-    var events = this.constructor.events;
-
     this._yuievt = {
         subs  : {},
-        events: events ? proto(events) : {}
+        events: proto(this.constructor.events || Y.EventTarget.events)
     };
 }
 
@@ -1014,9 +1012,10 @@ Y.mix(EventTarget, {
 
         if (!isInstance) {
             // Add the static publish method to the class
-            Class.publish = function () {
+            Class.publish = function (type, config, inheritsFrom) {
                 // bind to the class for portability
-                return EventTarget.publish.apply(Class, arguments);
+                return EventTarget._publish(Class, Class.events,
+                            type, config, inheritsFrom);
             }
         }
 
@@ -1074,9 +1073,6 @@ Y.mix(EventTarget, {
                             default event
     @static
     **/
-    publish: function (type, config, inheritsFrom) {
-        EventTarget._publish(this, this.events, type, config, inheritsFrom);
-    },
 
     /**
     Does the work for class and instance `publish()` methods.
@@ -1490,6 +1486,8 @@ EventTarget.prototype = {
         return this;
     }
 };
+
+EventTarget.configure(EventTarget);
 
 Y.CustomEvent = CustomEvent;
 Y.EventFacade = EventFacade;
