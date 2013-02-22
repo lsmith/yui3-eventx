@@ -360,10 +360,11 @@ Y.Event.publish({
             subs     = Y.Event._yuievt.subs[eventKey];
 
             if (subs && subs[phase] && subs[phase].length) {
-                event = new this.Event(type, (e.target || e.srcElement), {
-                    _event       : e,
-                    currentTarget: currentTarget
-                });
+                event = new Y.Event.EventFacade(type,
+                            (e.target || e.srcElement), {
+                                _event       : e,
+                                currentTarget: currentTarget
+                            });
 
                 subs = subs[phase];
                 // To be set using event.get('currentTarget');
@@ -400,9 +401,7 @@ Y.Event.publish({
                     }
                 }
             }
-        },
-
-        Event: DOMEventFacade
+        }
     }
 });
 
