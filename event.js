@@ -1093,7 +1093,8 @@ Y.mix(EventTarget, {
     @protected
     **/
     _publish: function (target, events, type, config, inheritsFrom) {
-        var event;
+        var CustomEvent = Y.CustomEvent,
+            event;
 
         if (isObject(type)) {
             for (event in type) {
@@ -1109,9 +1110,11 @@ Y.mix(EventTarget, {
                 event = config;
             } else if (!event || inheritsFrom) {
                 event = new CustomEvent(type, config,
-                                inheritsFrom || events[BASE]);
-            } else if (event) {
+                                (inheritsFrom || events[BASE]));
+            } else if (events.hasOwnProperty(type)) {
                 Y.mix(event, config);
+            } else if (event) {
+                event = new CustomEvent(type, config, (inheritsFrom || event));
             }
 
             if (event.publish) {
@@ -1121,7 +1124,6 @@ Y.mix(EventTarget, {
             events[type] = event;
         }
     }
-
 }, true);
 
 EventTarget.prototype = {
