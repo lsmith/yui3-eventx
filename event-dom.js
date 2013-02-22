@@ -2,7 +2,17 @@ YUI.add('eventx-dom', function (Y) {
 
 var isArray = Y.Lang.isArray,
     toArray = Y.Array,
-    push    = Array.prototype.push;
+    push    = Array.prototype.push,
+
+    eventTestTags = {
+        select: 'input',
+        change: 'input',
+        submit: 'form',
+        reset : 'form',
+        error : 'img',
+        load  : 'img',
+        abort : 'img'
+    };
 
 function DOMEventFacade(type, target, payload) {
     this._event = payload._event;
@@ -121,6 +131,30 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
 Y.Event = Y.mix(new Y.EventTarget(), {
 
     /**
+    Tests if an event name is a DOM event.
+
+    @method isEventSupported
+    @param {String} type
+    @return {Boolean}
+    **/
+    //Code by kangax, from 
+    //http://perfectionkills.com/detecting-event-support-without-browser-sniffing/
+    isEventSupported: Y.cached(function (type) {
+        var el = Y.config.doc.createElement(eventTestTags[type] || 'div'),
+            eventName   = 'on' + type;
+            isSupported = (eventName in el);
+
+        if (!isSupported) {
+            el.setAttribute(eventName, 'return;');
+            isSupported = typeof el[eventName] === 'function';
+        }
+
+        el = null;
+
+      return isSupported;
+    }),
+
+    /**
     Resolves the input value to a DOM Element or array of DOM Elements.
 
     If unsuccessful, `null` is returned.
@@ -182,10 +216,10 @@ Y.Event = Y.mix(new Y.EventTarget(), {
     EventFacade: DOMEventFacade
 }, true);
 
-Y.EventTarget.configure(Y.Event, null,
+Y.Event.publish({
     // Base event is dynamic to allow for dynamic DOM subscriptions such as
     // `Y.Event.on('click:li.expandable', callback, '.tree')`
-    new Y.CustomEvent('@BASE', {
+    '@BASE': new Y.CustomEvent('@BASE', {
         // TODO: simplified method implementations, no phases?
         // TODO: Is this safe for synthetic events to have DOMEventFacade as
         // this.Event? Maybe it should be a different facade.
@@ -193,35 +227,39 @@ Y.EventTarget.configure(Y.Event, null,
     }, Y.CustomEvent.DYNAMIC_BASE),
 
     // Default event subscribes to DOM events
-    {
-        subscribe: function (_, phase, args) {
-            var events     = this.dynamicEvents,
-                // Avoid dynamic event routing for white listed DOM events
-                type       = args[0],
-                isDOMEvent = (Y.Node && Y.Node.NODE_EVENTS[type]),
+    '@DEFAULT': {
+        subscribe: function (target, phase, args) {
+            var type       = args[0],
                 capture    = (phase === 'capture'),
                 sub        = null,
-                i, len, type, target, subs, eventKey, needsDOMSub;
+                isDOMEvent = Y.Node ?
+                                Y.Node.NODE_EVENTS[type] :
+                                Y.Event.isEventSupported(type),
+                event = !isDOMEvent &&
+                            this.getDynamicEvent(target, args, 'subscribe'),
+                i, len, type, el, subs, eventKey, needsDOMSub;
 
-            if (!isDOMEvent && events) {
-                for (i = 0, len = events.length; i < len; ++i) {
-                    if (events[i].test(target, args)) {
-                        return events[i].subscribe(target, phase, args);
-                    }
-                }
+            if (event) {
+                return event.subscribe(target, phase, args);
+            }
+            
+            if (!isDOMEvent) {
+                // Custom event subscription
+                return this._super.subscribe.apply(this, arguments);
             }
 
+            // DOM event subscription
             // Convert from arguments object to array
-            args   = toArray(args, 0, true);
-            target = Y.Event._resolveTarget(args[2]);
-            phase  = capture ? 'capture' : 'on';
+            args  = toArray(args, 0, true);
+            el    = Y.Event._resolveTarget(args[2]);
+            phase = capture ? 'capture' : 'on';
 
-            if (target && target.nodeType) {
+            if (el && el.nodeType) {
                 // Remove the target from args to allow thisObj and payload
                 // args to slide into their proper indices
                 args.splice(2, 1);
 
-                eventKey = args[0] = Y.stamp(target) + ':' + type;
+                eventKey = args[0] = Y.stamp(el) + ':' + type;
 
                 sub = new this.Subscription(Y.Event, args, phase);
 
@@ -242,13 +280,14 @@ Y.EventTarget.configure(Y.Event, null,
                 subs[phase].push(sub);
 
                 if (needsDOMSub) {
-                    YUI.Env.add(target, type, Y.Event._handleEvent, capture);
+                    YUI.Env.add(el, type, Y.Event._handleEvent, capture);
                 }
-            } else if (isArray(target)) {
+            // TODO: el could be a DOM collection ala getElementsByTagName()
+            } else if (isArray(el)) {
                 subs = [];
-                for (i = 0, len = target.length; i < len; ++i) {
-                    args[2] = target[i];
-                    subs.push(this.subscribe(Y.Event, phase, args));
+                for (i = 0, len = el.length; i < len; ++i) {
+                    args[2] = el[i];
+                    subs.push(this.subscribe(target, phase, args));
                 }
 
                 // Return batch subscription
@@ -258,41 +297,51 @@ Y.EventTarget.configure(Y.Event, null,
             return sub;
         },
 
-        unsubscribe: function (_, args) {
-            var events     = this.dynamicEvents,
-                // Avoid dynamic event routing for white listed DOM events
-                isDOMEvent = (Y.Node && Y.Node.NODE_EVENTS[args[0]]),
-                isSub      = (args[0].type && args[0].callback),
-                capture    = (args[2] === 'capture'),
-                i, len, target, phase;
+        unsubscribe: function (target, args) {
+            var type  = args[0],
+                isSub = (type.type && type.callback),
+                capture, isDOMEvent, event, i, len, el, eventKey, phase;
 
-            if (!isSub && !isDOMEvent && events) {
-                for (i = 0, len = events.length; i < len; ++i) {
-                    if (events[i].test(target, args)) {
-                        return events[i].unsubscribe(Y.Event, args);
-                    }
-                }
+            if (isSub) {
+                return this._super.unsubscribe(target, args);
             }
 
-            // No dynamic event and not passed a Subscription instance to
-            // detach
-            if (!isSub) {
-                target   = Y.Event._resolveTarget(args[2]);
-                if (target && target.nodeType) {
-                    args[0] = Y.stamp(target) + ':' + args[0];
-                    args[2] = capture ? 'capture' : 'on';
-                } else if (isArray(target)) {
-                    for (i = 0, len = target.length; i < len; ++i) {
-                        args[2] = target[i];
-                        this.unsubscribe(Y.Event, args);
-                    }
+            capture = (args[2] === 'capture');
+            // Avoid dynamic event routing for white listed DOM events
+            isDOMEvent = Y.Node ?
+                Y.Node.NODE_EVENTS[type] :
+                Y.Event.isEventSupported(type);
+            event = !isDOMEvent &&
+                        this.getDynamicEvent(target, args, 'unsubscribe');
 
-                    return;
-                }
+            if (event) {
+                return event.unsubscribe(target, args);
             }
 
-            this._super.unsubscribe(Y.Event, args);
-            // TODO: detach DOM subscriber when last subscriber is removed
+            if (!isDOMEvent) {
+                return this._super.unsubscribe(target, args);
+            }
+
+            el = Y.Event._resolveTarget(args[2]);
+
+            if (el && el.nodeType) {
+                args[0] = eventKey = Y.stamp(el) + ':' + type;
+                args[2] = capture ? 'capture' : 'on';
+
+                this._super.unsubscribe(target, args);
+
+                // No more subs, remove the DOM subscription
+                if (!target._yuievt.subs[eventKey][phase].length) {
+                    target._yuievt.subs[eventKey][phase] = null;
+
+                    YUI.Env.remove(el, type, Y.Event._handleEvent, capture);
+                }
+            } else if (isArray(el)) {
+                for (i = 0, len = el.length; i < len; ++i) {
+                    args[2] = el[i];
+                    this.unsubscribe(target, args);
+                }
+            }
         },
 
         fire: function (_, type, e, currentTarget) {
@@ -345,6 +394,7 @@ Y.EventTarget.configure(Y.Event, null,
         },
 
         Event: DOMEventFacade
-    });
+    }
+});
 
 }, '0.0.1', { requires: [ 'eventx', 'selector' ] });
