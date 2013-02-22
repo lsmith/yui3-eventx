@@ -43,7 +43,11 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
     **/
     preventDefault: function () {
         this._prevented = true;
-        this._event.preventDefault();
+
+        if (this._event.preventDefault) {
+            this._event.preventDefault();
+        }
+
         this._event.returnValue = false;
 
         return this;
@@ -63,7 +67,12 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
         // It might have been stopped with 2 already
         if (!this._stopped) {
             this._stopped = 1;
-            this._event.stopPropagation();
+
+            if (this._event.stopPropagation) {
+                this._event.stopPropagation();
+            }
+
+            this._event.cancelBubble = true;
         }
 
         return this;
@@ -81,7 +90,12 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
     **/
     stopImmediatePropagation: function () {
         this._stopped = 2;
-        this._event.stopPropagation();
+
+        if (this._event.stopPropagation) {
+            this._event.stopPropagation();
+        }
+
+        this._event.cancelBubble = true;
 
         return this;
     },
@@ -96,10 +110,8 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
     @chainable
     **/
     halt: function (immediate) {
-        this._prevented = true;
-        this._stopped = immediate ? 2 : 1;
-        this._event.preventDefault();
-        this._event.stopPropagation();
+        this[immediate ? 'stopImmediatePropagation' : 'stopPropagation']()
+            .preventDefault();
 
         return this;
     }
@@ -180,8 +192,7 @@ Y.EventTarget.configure(Y.Event, null,
         Event: DOMEventFacade
     }, Y.CustomEvent.DYNAMIC_BASE),
 
-    // Default event routes to Y.Event.attach for NODE_EVENTS and if there
-    // isn't a dynamic event to handle the subscription
+    // Default event subscribes to DOM events
     {
         subscribe: function (_, phase, args) {
             var events     = this.dynamicEvents,
@@ -239,7 +250,9 @@ Y.EventTarget.configure(Y.Event, null,
                     args[2] = target[i];
                     subs.push(this.subscribe(Y.Event, phase, args));
                 }
-                // TODO return group sub
+
+                // Return batch subscription
+                sub = new Y.CustomEvent.Subscription(subs);
             }
 
             return sub;
