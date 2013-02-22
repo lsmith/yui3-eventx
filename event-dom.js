@@ -37,7 +37,7 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
     // relatedTarget and deal with target possibly being a text node
     get: function (name) {
         if (this._getter[name]) {
-            return this._getter[name](name);
+            return this._getter[name].call(this, name);
         } else if (name in this.data) {
             return this.data[name];
         } else {
@@ -233,11 +233,11 @@ Y.Event.publish({
                 capture    = (phase === 'capture'),
                 sub        = null,
                 isDOMEvent = Y.Node ?
-                                Y.Node.NODE_EVENTS[type] :
+                                Y.Node.DOM_EVENTS[type] :
                                 Y.Event.isEventSupported(type),
                 event = !isDOMEvent &&
                             this.getDynamicEvent(target, args, 'subscribe'),
-                i, len, type, el, subs, eventKey, needsDOMSub;
+                isYEvent, i, len, type, el, subs, eventKey, needsDOMSub;
 
             if (event) {
                 return event.subscribe(target, phase, args);
@@ -250,8 +250,9 @@ Y.Event.publish({
 
             // DOM event subscription
             // Convert from arguments object to array
+            isYEvent = (target === Y.Event);
             args = toArray(args, 0, true);
-            el = Y.Event._resolveTarget(target === Y.Event ? args[2] : target);
+            el = Y.Event._resolveTarget(isYEvent ? args[2] : target);
             phase = capture ? 'capture' : 'on';
 
             if (el && el.nodeType) {
@@ -263,7 +264,7 @@ Y.Event.publish({
 
                 eventKey = args[0] = Y.stamp(el) + ':' + type;
 
-                sub = new this.Subscription(target, args, phase);
+                sub = new this.Subscription(Y.Event, args, phase);
 
                 subs = Y.Event._yuievt.subs;
 
@@ -288,7 +289,12 @@ Y.Event.publish({
             } else if (isArray(el)) {
                 subs = [];
                 for (i = 0, len = el.length; i < len; ++i) {
-                    args[2] = el[i];
+                    if (isYEvent) {
+                        args[2] = el[i];
+                    } else {
+                        target = el[i];
+                    }
+
                     subs.push(this.subscribe(target, phase, args));
                 }
 
@@ -311,7 +317,7 @@ Y.Event.publish({
             capture = (args[2] === 'capture');
             // Avoid dynamic event routing for white listed DOM events
             isDOMEvent = Y.Node ?
-                Y.Node.NODE_EVENTS[type] :
+                Y.Node.DOM_EVENTS[type] :
                 Y.Event.isEventSupported(type);
             event = !isDOMEvent &&
                         this.getDynamicEvent(target, args, 'unsubscribe');
