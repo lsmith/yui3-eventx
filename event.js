@@ -1007,16 +1007,13 @@ Y.mix(EventTarget, {
     configure: function (Class, events, baseEvent, defaultEvent) {
         var superEvents = Class.superclass &&
                           Class.superclass.constructor.events,
-            isInstance  = typeof Class !== 'function',
             superEvent;
 
-        if (!isInstance) {
-            // Add the static publish method to the class
-            Class.publish = function (type, config, inheritsFrom) {
-                // bind to the class for portability
-                return EventTarget._publish(Class, Class.events,
-                            type, config, inheritsFrom);
-            }
+        // Add the static publish method to the class
+        Class.publish = function (type, config, inheritsFrom) {
+            // bind to the class for portability
+            return Y.EventTarget._publish(Class, Class.events,
+                        type, config, inheritsFrom);
         }
 
         // Create the class's @BASE event if necessary
@@ -1038,7 +1035,7 @@ Y.mix(EventTarget, {
                 defaultEvent, superEvent || baseEvent);
         }
 
-        (isInstance ? Class._yuievt : Class).events = {
+        Class.events = {
             '@BASE'   : baseEvent,
             '@DEFAULT': defaultEvent
         };
