@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+    <title>Test Page</title>
+</head>
+<body class="yui3-skin-sam">
+<p id="x">Treasure</p>
+
+<script src="http://yui.yahooapis.com/3.8.1/build/yui/yui.js"></script>
+<script src="event.js"></script>
+<script src="event-delegate.js"></script>
+<script>
+YUI({
+    filter: 'raw'
+}).use('eventx-delegate', function (Y) {
+
+function C(name) {
+    this.name = name;
+    Y.EventTarget.call(this);
+}
+Y.extend(C, Y.EventTarget);
+Y.EventTarget.configure(C, {
+    foo: { bubbles: false },
+    bar: {
+        defaultFn: function () {
+            console.log("bar event behavior");
+        },
+        preventedFn: function () {
+            console.log("bar behavior prevented");
+        }
+    },
+    onetime: {
+        fireOnce: true,
+        defaultFn: function () {
+            console.log("One Time event behavior - this should only be logged once");
+        }
+    }
+});
+
+var c = new C("Little C"),
+    bigC = new C("Big C"),
+    ultraC = new C("Ultra C"),
+    lateralC = new C("Lateral C");
+
+c.addTarget(bigC); // Should get event second
+c.addTarget(lateralC); // Should get event third
+bigC.addTarget(ultraC); // Should get event fourth
+bigC.addTarget(lateralC); // Should NOT get event a second time
+ultraC.addTarget(lateralC); // Should NOT get event a second time
+
+lateralC.delegate('test', function (e) {
+    console.log('Delegated from Lateral C, heard ' + this.name, e, this);
+}, function (e) {
+    console.log('Testing ' + e.data.currentTarget.name);
+    return /^(?:Little|Big)/.test(e.data.currentTarget.name);
+}, { name: 'Overridden' });
+
+c.fire('test');
+
+});
+</script>
+</body>
+</html>
