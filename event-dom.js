@@ -217,14 +217,9 @@ Y.Event = Y.mix(new Y.EventTarget(), {
 }, true);
 
 Y.Event.publish({
-    // Base event is dynamic to allow for dynamic DOM subscriptions such as
+    // Base event supports smart events to allow for DOM subscriptions such as
     // `Y.Event.on('click:li.expandable', callback, '.tree')`
-    '@BASE': new Y.CustomEvent('@BASE', {
-        // TODO: simplified method implementations, no phases?
-        // TODO: Is this safe for synthetic events to have DOMEventFacade as
-        // this.Event? Maybe it should be a different facade.
-        Event: DOMEventFacade
-    }, Y.CustomEvent.DYNAMIC_BASE),
+    '@BASE': Y.CustomEvent.SMART_BASE,
 
     // Default event subscribes to DOM events
     '@DEFAULT': {
@@ -236,7 +231,7 @@ Y.Event.publish({
                                 Y.Node.DOM_EVENTS[type] :
                                 Y.Event.isEventSupported(type),
                 event = !isDOMEvent &&
-                            this.getDynamicEvent(target, args, 'subscribe'),
+                            this.getSmartEvent(target, args, 'subscribe'),
                 isYEvent, i, len, type, el, subs, eventKey, needsDOMSub;
 
             if (event) {
@@ -258,7 +253,7 @@ Y.Event.publish({
             if (el && el.nodeType) {
                 // Remove the target from args to allow thisObj and payload
                 // args to slide into their proper indices
-                if (target === Y.Event) {
+                if (isYEvent) {
                     args.splice(2, 1);
                 }
 
@@ -266,23 +261,10 @@ Y.Event.publish({
 
                 sub = new this.Subscription(Y.Event, args, phase);
 
-                subs = Y.Event._yuievt.subs;
+                this.registerSub(Y.Event, sub);
 
-                if (!subs[eventKey]) {
-                    needsDOMSub = true;
-                    subs[eventKey] = {};
-                }
-
-                subs = subs[eventKey];
-
-                if (!subs[phase]) {
-                    needsDOMSub = true;
-                    subs[phase] = [];
-                }
-
-                subs[phase].push(sub);
-
-                if (needsDOMSub) {
+                // First subscription needs a DOM subscription
+                if (Y.Event._yuievt.subs[eventKey][phase].length === 1) {
                     YUI.Env.add(el, type, Y.Event._handleEvent, capture);
                 }
             // TODO: el could be a DOM collection ala getElementsByTagName()
@@ -315,12 +297,12 @@ Y.Event.publish({
             }
 
             capture = (args[2] === 'capture');
-            // Avoid dynamic event routing for white listed DOM events
+            // Avoid smart event routing for white listed DOM events
             isDOMEvent = Y.Node ?
                 Y.Node.DOM_EVENTS[type] :
                 Y.Event.isEventSupported(type);
             event = !isDOMEvent &&
-                        this.getDynamicEvent(target, args, 'unsubscribe');
+                        this.getSmartEvent(target, args, 'unsubscribe');
 
             if (event) {
                 return event.unsubscribe(target, args);
@@ -354,10 +336,13 @@ Y.Event.publish({
 
         fire: function (target, type, e, currentTarget) {
             var subs = target._yuievt.subs[type],
+                isDOMEvent = !subs && (Y.Node ?
+                                Y.Node.DOM_EVENTS[type] :
+                                Y.Event.isEventSupported(type)),
                 eventKey, phase, event, i, len, sub, ret;
 
             // custom event subscriptions
-            if (subs) {
+            if (subs || !isDOMEvent) {
                 return this._super.fire.apply(this, arguments);
             }
 

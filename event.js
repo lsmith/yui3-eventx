@@ -173,8 +173,7 @@ CustomEvent.prototype = {
     subscribe: function (target, phase, args) {
         var details = this.parseSignature && this.parseSignature(args),
             sub     = new this.Subscription(target, args, phase, details),
-            abort   = this.preventDups    && this.isSubscribed(target, sub),
-            subs;
+            abort   = this.preventDups    && this.isSubscribed(target, sub);
 
         if (!abort) {
             if (this.on) {
@@ -183,21 +182,7 @@ CustomEvent.prototype = {
 
             // Register the subscription
             if (!abort) {
-                // This was inlined from previous iteration as
-                // registerSub(target, sub), which then called abstracted
-                // function pushByPath(target._yuievt, ...) to avoid the extra
-                // function hops. It might be useful to break this back out to
-                // registerSub(), but for now, start simple.
-                subs = target._yuievt.subs;
-
-                // target._yuievt.subs.foo
-                subs = subs[sub.type] || (subs[sub.type] = {});
-
-                // target._yuievt.subs.foo.before
-                subs = subs[sub.phase] || (subs[sub.phase] = []);
-
-                // target._yuievt.subs.foo.before.push(sub)
-                subs.push(sub);
+                this.registerSub(target, sub);
             } else if (abort.detach) {
                 // Allow on() to return an alternate Subscription.
                 // It is assumed that this subscription was registered on the
@@ -208,6 +193,26 @@ CustomEvent.prototype = {
         }
 
         return abort ? null : sub;
+    },
+
+    /**
+    Add a Subscription to the target's subs collection.
+
+    @method registerSub
+    @param {EventTarget} target The host of the event subscription
+    @param {Subscription} sub The subscription to store
+    **/
+    registerSub: function (target, sub) {
+        var subs = target._yuievt.subs;
+
+        // target._yuievt.subs.foo
+        subs = subs[sub.type] || (subs[sub.type] = {});
+
+        // target._yuievt.subs.foo.before
+        subs = subs[sub.phase] || (subs[sub.phase] = []);
+
+        // target._yuievt.subs.foo.before.push(sub)
+        subs.push(sub);
     },
 
     /**
@@ -621,21 +626,21 @@ for subclassing.
 **/
 CustomEvent.Subscription = Subscription;
 
-// DYNAMIC_BASE and DYNAMIC_DEFAULT would be in a separate module if it weren't
+// SMART_BASE and SMART_DEFAULT would be in a separate module if it weren't
 // for their being useful for Y, and the addition of the EventTarget interface
 // to Y being so small as to make it silly to have split out to a different
 // module. I'd publish them directly on Y if I didn't think they were more
 // widely useful.
 /**
-A base event that includes support for registering dynamic events if they are
+A base event that includes support for registering smart events if they are
 published with a `config.test(target, args, method)` method or `config.pattern`
 regex to match against the event type string. _method_ is the event method name
 that's calling `test()`, such as "subscribe" or "unsubscribe", to allow the
 test logic to fork for the appropriate signature in _args_ if necessary.
 
-Dynamic events are not bound to a specific event name, but use a `test()`
+Smart events are not bound to a specific event name, but use a `test()`
 method to determine if they can appropriately handle a subscription. Two
-examples of dynamic events are category events and routing events.
+examples of smart events are category events and routing events.
 
 Category events can be used to handle events whose names match a convention,
 such as 'nameChange' or 'click:li.expandable'.
@@ -643,16 +648,16 @@ such as 'nameChange' or 'click:li.expandable'.
 Routing events can be used to handle a particular subscription signature,
 directing subscriptions to a different subscription mechanism.
 
-By convention, dynamic events should be named starting with an @ symbol
+By convention, smart events should be named starting with an @ symbol
 (e.g. `target.publish('@changes', { pattern: /\w+Change$/, ... });`) and
 should not be explicitly fired. Instead, they are used to create subscriptions
 to other events, possibly publishing them en route.
 
-@property DYNAMIC_BASE
+@property SMART_BASE
 @type {CustomEvent}
 @static
 **/
-CustomEvent.DYNAMIC_BASE = new CustomEvent('@BASE', {
+CustomEvent.SMART_BASE = new CustomEvent('@BASE', {
     publish: function (target) {
         var events, defaultEvent;
 
@@ -663,7 +668,7 @@ CustomEvent.DYNAMIC_BASE = new CustomEvent('@BASE', {
         }
 
         if (this.test) {
-            // Hack city. Dynamic events need to be collected on the event
+            // Hack city. Smart events need to be collected on the event
             // that will reference them rather than on an instance or class
             // because publish could be on the instance or class.
             events = typeof target === 'function' ?
@@ -671,24 +676,24 @@ CustomEvent.DYNAMIC_BASE = new CustomEvent('@BASE', {
                         target._yuievt.events;
             defaultEvent = events['@DEFAULT'];
 
-            if (!defaultEvent.dynamicEvents) {
-                defaultEvent.dynamicEvents = [];
+            if (!defaultEvent.smartEvents) {
+                defaultEvent.smartEvents = [];
             }
 
-            if (arrayIndex(defaultEvent.dynamicEvents, this) === -1) {
-                defaultEvent.dynamicEvents.push(this);
+            if (arrayIndex(defaultEvent.smartEvents, this) === -1) {
+                defaultEvent.smartEvents.push(this);
             }
         }
     }
 });
 
 /**
-A default event that first looks for published dynamic events to handle
+A default event that first looks for published smart events to handle
 subscriptions before handing control over to the base event subscription logic.
 
-Dynamic events are not bound to a specific event name, but use a `test()`
+Smart events are not bound to a specific event name, but use a `test()`
 method to determine if they can appropriately handle a subscription. Two
-examples of dynamic events are category events and routing events.
+examples of smart events are category events and routing events.
 
 Category events can be used to handle events whose names match a convention,
 such as 'nameChange' or 'click:li.expandable'.
@@ -696,26 +701,26 @@ such as 'nameChange' or 'click:li.expandable'.
 Routing events can be used to handle a particular subscription signature,
 directing subscriptions to a different subscription mechanism.
 
-By convention, dynamic events should be named starting with an @ symbol
+By convention, smart events should be named starting with an @ symbol
 (e.g. `target.publish('@changes', { pattern: /\w+Change$/, ... });`) and
 should not be explicitly fired. Instead, they are used to create subscriptions
 to other events, possibly publishing them en route.
 
-@property DEFAULT_EVENT
+@property SMART_DEFAULT
 @type {CustomEvent}
 **/
-CustomEvent.DYNAMIC_DEFAULT = new CustomEvent('@DEFAULT', {
+CustomEvent.SMART_DEFAULT = new CustomEvent('@DEFAULT', {
     subscribe: function (target, phase, args) {
-        var event = this.getDynamicEvent(target, args, 'subscribe');
+        var event = this.getSmartEvent(target, args, 'subscribe');
 
         return event ?
             event.subscribe(target, phase, args) :
-            // No dynamic event, defer to the base event subscription logic
+            // No smart event, defer to the base event subscription logic
             this._super.subscribe.apply(this, arguments);
     },
 
-    getDynamicEvent: function (target, args, method) {
-        var events = this.dynamicEvents,
+    getSmartEvent: function (target, args, method) {
+        var events = this.smartEvents,
             i, len;
 
         if (events) {
@@ -995,7 +1000,7 @@ EventFacade.prototype = {
     **/
     set: function (name, val) {
         if (this._setter[name]) {
-            this._setter[name](name, val);
+            this._setter[name].call(this, name, val);
         } else {
             this.data[name] = val;
         }
@@ -1544,8 +1549,8 @@ Y.mix(Y, Y.EventTarget.prototype, true);
 Y.EventTarget.call(Y);
 
 Y.publish({
-    '@BASE'   : CustomEvent.DYNAMIC_BASE,
-    '@DEFAULT': CustomEvent.DYNAMIC_DEFAULT
+    '@BASE'   : CustomEvent.SMART_BASE,
+    '@DEFAULT': CustomEvent.SMART_DEFAULT
 });
 
 }, '', { requires: ['oop'] });
