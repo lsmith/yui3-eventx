@@ -1,14 +1,15 @@
 YUI.add('eventx-delegate', function (Y) {
 /**
 Adds `delegate` method to EventTarget.prototype and a base implementation to
-the CustomEvent.prototype. Event's can override their `delegate` method to
-provide a custom implementation.
+the CustomEvent.prototype. Event's can override their `delegate` and/or
+`delegateNotify` method to provide a custom implementation.
 
 @module eventx
 @submodule eventx-delegate
 @for EventTarget
 **/
-var toArray = Y.Array;
+var toArray = Y.Array,
+    CEproto = Y.CustomEvent.prototype;
 
 /**
 Make a delegated event subscription. The default signature for delegation is:
@@ -67,7 +68,7 @@ Y.EventTarget.prototype.delegate = function (type) {
 /**
 @for CustomEvent
 **/
-Y.CustomEvent.prototype.delegate = function (target, args) {
+CEproto.delegate = function (target, args) {
     var subs     = target._yuievt.subs,
         type     = args[0],
         callback = args[1],
@@ -76,13 +77,12 @@ Y.CustomEvent.prototype.delegate = function (target, args) {
 
     if (callback && filter) {
         // Remove the filter replace the callback with the delegation callback
-        args.splice(1, 2, this.delegateFilter);
+        args.splice(1, 2, this.delegateNotify);
 
         sub = new this.Subscription(target, args, 'before', {
             callback : callback,
             filter   : filter,
-            container: target,
-
+            container: target
         }),
 
         subs = subs[type] || (subs[type] = {});
@@ -93,7 +93,7 @@ Y.CustomEvent.prototype.delegate = function (target, args) {
     return sub;
 };
 
-Y.CustomEvent.prototype.delegateFilter = function (e) {
+CEproto.delegateNotify = function (e) {
     var sub     = e.subscription,
         details = sub && sub.details,
         filter  = details && details.filter,
@@ -117,11 +117,18 @@ Y.CustomEvent.prototype.delegateFilter = function (e) {
                     .apply((defaultThis ? path[i] : this), arguments);
             }
 
-            if (path[i] === container) {
+            // e.stopPropagation() behaves as though the event were bubbling.
+            // Break out of the loop if the subscribed target isn't the last
+            // in the bubble path.
+            if (e._stopped || path[i] === container) {
                 break;
             }
         }
     }
 };
+
+
+// Add Y.delegate, since the prototype was mixed on, not inherited
+Y.delegate = Y.EventTarget.prototype.delegate;
 
 }, '', { requires: ['eventx'] });
