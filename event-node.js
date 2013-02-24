@@ -7,25 +7,34 @@ Adds EventTarget support to Node and NodeList.
 @for Node
 **/
 // Use Y.Event's base and default events for Node and NodeList
-var events       = Y.Object(Y.Event._yuievt.events),
+var EventTarget  = Y.EventTarget,
+    events       = Y.Object(Y.Event._yuievt.events),
     baseEvent    = events['@BASE'],
     defaultEvent = events['@DEFAULT'];
 
-Y.augment(Y.Node, Y.EventTarget);
-Y.EventTarget.configure(Y.Node, events, baseEvent, defaultEvent);
+Y.augment(Y.Node, EventTarget);
+EventTarget.configure(Y.Node, events, baseEvent, defaultEvent);
 
-Y.augment(Y.NodeList, Y.EventTarget);
-Y.EventTarget.configure(Y.NodeList, events, baseEvent, defaultEvent);
+Y.augment(Y.NodeList, EventTarget);
+EventTarget.configure(Y.NodeList, events, baseEvent, defaultEvent);
 
-function toNode(val) {
-    return this.data[val] || (this.data[val] = Y.one(this._event[val]));
+function getNode(name) {
+    var node = this.data[name];
+
+    // Allow setters to populate e.data[name] with a DOM element.
+    // Allowing set(...) to store DOM elements helps delegation performance.
+    if (!node || !(node instanceof Y.Node)) {
+        node = (this.data[name] = Y.one(this._event[name]));
+    }
+
+    return node;
 }
 
 Y.mix(Y.Event.EventFacade.prototype._getter, {
     target: function (val) {
         var target = this.data.target;
 
-        if (!target) {
+        if (!target || !(target instanceof Y.Node)) {
             target = this._event.target;
 
             while (target.nodeType === 3) {
@@ -38,8 +47,8 @@ Y.mix(Y.Event.EventFacade.prototype._getter, {
         return target;
     },
 
-    currentTarget: toNode,
-    relatedTarget: toNode
+    currentTarget: getNode,
+    relatedTarget: getNode
     // TODO: keyCode, charCode, etc
 }, true);
 
