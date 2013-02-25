@@ -5,7 +5,8 @@ Adds DOM event delegation support to Y.Event.
 @module eventx
 @submodule eventx-dom-delegate
 **/
-var toArray = Y.Array;
+var toArray = Y.Array,
+    domTest = Y.getEvent('@dom').test;
 
 Y.Event.publish('@DEFAULT', {
     // It's a shame that I had to duplicate so much logic from subscribe()
@@ -128,6 +129,26 @@ Y.Event.publish('@DEFAULT', {
             root          = currentTarget === container ? null : container;
 
         return Y.Selector.test(currentTarget, this.details.selector, root);
+    }
+});
+
+// Republish the @dom smart event on Y to add support for delegate in the test.
+Y.publish('@dom', {
+    test: function (target, args, method) {
+        var match = domTest.apply(this, arguments),
+            filterType;
+
+        if (match && method === 'delegate') {
+            filterType = typeof args[3];
+
+            match = (filterType === 'string' || filterType === 'function');
+        }
+
+        return match;
+    },
+
+    delegate: function () {
+        return Y.Event.delegate.apply(Y.Event, arguments);
     }
 });
 
