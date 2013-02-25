@@ -5,6 +5,8 @@ Adds DOM event delegation support to Y.Event.
 @module eventx
 @submodule eventx-dom-delegate
 **/
+var toArray = Y.Array;
+
 Y.Event.publish('@DEFAULT', {
     // It's a shame that I had to duplicate so much logic from subscribe()
     delegate: function (target, args) {
@@ -52,15 +54,15 @@ Y.Event.publish('@DEFAULT', {
             sub = new this.Subscription(Y.Event, args, 'on', {
                 callback : callback,
                 filter   : filter,
-                container: target,
+                container: el,
                 selector : selector
             });
 
             this.registerSub(Y.Event, sub);
 
             // First subscription needs a DOM subscription
-            if (Y.Event._yuievt.subs[eventKey][phase].length === 1) {
-                YUI.Env.add(el, type, Y.Event._handleEvent, capture);
+            if (Y.Event._yuievt.subs[eventKey].on.length === 1) {
+                YUI.Env.add(el, type, Y.Event._handleEvent, false);
             }
         // TODO: el could be a DOM collection ala getElementsByTagName()
         } else if (isArray(el)) {
@@ -104,7 +106,7 @@ Y.Event.publish('@DEFAULT', {
             while (target) {
                 e.set('currentTarget', target);
 
-                if (filter.call(sub, e) {
+                if (filter.call(sub, e)) {
                     currentTarget = defaultThis ? e.get('currentTarget') : this;
                     // arguments contains e, which has had its currentTarget
                     // updated.
