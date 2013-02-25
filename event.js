@@ -1162,7 +1162,7 @@ Y.mix(EventTarget, {
                 event = new CustomEvent(type, config,
                                 (inheritsFrom || events[BASE]));
             } else if (events.hasOwnProperty(type)) {
-                Y.mix(event, config);
+                Y.mix(event, config, true);
             } else if (event) {
                 event = new CustomEvent(type, config, (inheritsFrom || event));
             }
