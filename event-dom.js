@@ -293,10 +293,9 @@ Y.Event.publish({
                 capture, isDOMEvent, event, i, len, el, eventKey, phase;
 
             if (isSub) {
-                return this._super.unsubscribe(target, args);
+                return this._super.unsubscribe.apply(this, arguments);
             }
 
-            capture = (args[2] === 'capture');
             // Avoid smart event routing for white listed DOM events
             isDOMEvent = Y.Node ?
                 Y.Node.DOM_EVENTS[type] :
@@ -309,20 +308,22 @@ Y.Event.publish({
             }
 
             if (!isDOMEvent) {
-                return this._super.unsubscribe(target, args);
+                return this._super.unsubscribe.apply(this, arguments);
             }
 
             el = Y.Event._resolveTarget(args[2]);
 
             if (el && el.nodeType) {
-                args[0] = eventKey = Y.stamp(el) + ':' + type;
-                args[2] = capture ? 'capture' : 'on';
+                eventKey = Y.stamp(el) + ':' + type;
+                capture  = (args[3] === 'capture');
+                phase    = capture ? 'capture' : 'on';
 
-                this._super.unsubscribe(target, args);
+                this._super.unsubscribe.call(this, Y.Event,
+                    [eventKey, args[1], phase]);
 
                 // No more subs, remove the DOM subscription
-                if (!target._yuievt.subs[eventKey][phase].length) {
-                    target._yuievt.subs[eventKey][phase] = null;
+                if (!Y.Event._yuievt.subs[eventKey][phase].length) {
+                    Y.Event._yuievt.subs[eventKey][phase] = null;
 
                     YUI.Env.remove(el, type, Y.Event._handleEvent, capture);
                 }
@@ -396,4 +397,64 @@ Y.Event.publish({
     }
 });
 
-}, '0.0.1', { requires: [ 'eventx', 'selector' ] });
+
+/**
+A smart event to add support for subscribing to DOM events from
+`Y.on(type, callback, targetOrSelector, thisOverride, ...args)`.
+
+Matches `Y.on(type, callback, selector)` when:
+* _selector_ is a string OR
+* _selector_ is a DOM element
+* type is in the Y.Node.NODE_EVENTS whitelist AND
+    * _selector_ is falsy (the `Y.config.win` object is used) OR
+    * _selector_ is a Node or NodeList
+
+The `this` override argument and additional subscription binding arguments are
+still supported and follow the _selector_ argument.
+
+Since this is a smart event, it is not for direct subscription.
+
+@event @dom
+@for YUI
+**/
+Y.publish('@dom', {
+    test: function (target, args, method) {
+        var type       = args[0],
+            isDOMEvent = Y.Node ?
+                            Y.Node.DOM_EVENTS[type] :
+                            Y.Event.isEventSupported(type),
+            selector = args[2];
+
+        // Must be a DOM event name AND any of the following:
+        // Note, the secondary criteria are ordered based on most likely match,
+        // except !selector, which has to be tested before the others
+        return isDOMEvent &&
+            // 1. No selector (assumes window), OR
+            (!selector ||
+            // 2. string selector (assumes css selector), OR
+            typeof selector === 'string' ||
+            // 3. Node or NodeList, OR
+            (Y.Node &&
+                (selector instanceof Y.Node ||
+                 selector instanceof Y.NodeList)) ||
+            // 4. HTML element, OR
+            selector.nodeType ||
+            // 5. Array or DOM collection of HTML elements
+            (selector[0] && selector[0].nodeType));
+    },
+
+    subscribe: function () {
+        // Route dom event subscriptions to Y.Event.
+        return Y.Event.on.apply(Y.Event, arguments);
+    },
+
+    unsubscribe: function () {
+        return Y.Event.on.apply(Y.Event, arguments);
+    },
+
+    fire: function () {
+        return Y.Event.fire.apply(Y.Event, arguments);
+    }
+});
+
+}, '', { requires: [ 'eventx', 'selector' ] });
