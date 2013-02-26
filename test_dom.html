@@ -67,6 +67,30 @@ Y.on('click', function (e, bool, lastName) {
         this.tagName + ' ' + lastName + (bool ? '!' : ' :(');
 }, '#thisAndArgs', { tagName: 'Angie' }, true, 'Good');
 
+Y.on('test', function (e) {
+    console.log('custom event from Y: ', e);
+});
+Y.publish({
+    foo: { defaultFn: function (e) { console.log('foo defaultFn', e); } },
+    bar: {
+        fire: function (target, e) {
+            this._super.fire.apply(this, arguments);
+            console.log('after the after() subs on bar', e);
+        }
+    }
+});
+
+Y.on('bar', function (e) {
+    console.log('on("bar")', e);
+});
+Y.after('bar', function (e) {
+    console.log('after("bar")', e);
+});
+
+Y.fire('test', { payload: 'Hi there' })
+ .fire('foo')
+ .fire('bar');
+
 });
 </script>
 </body>

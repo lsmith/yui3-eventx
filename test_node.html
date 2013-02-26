@@ -32,20 +32,27 @@ YUI({
     filter: 'raw'
 }).use('eventx-node', function (Y) {
 
-//var node = document.getElementById('x');
+var links     = Y.all('.x'),
+    increment = Y.one('#increment');
 
-Y.all('.x').on("click", function (e) {
-    console.log("Treasure node clicked!", e);
+links.on("click", function (e) {
+    console.log('link(url=' + this.get('href') + ') clicked!', e);
     e.preventDefault();
-    //e.detach();
-}, '.x');
+    // This shouldn't do anything because the 'test' custom event was
+    // subscribed to the NodeList, not the link node
+    this.fire('test');
+});
 
-Y.one('#increment').on('click', function (e) {
+increment.on('click', function (e) {
     var counter = this.one('span')._node;
 
     counter.innerHTML = (+counter.innerHTML) + 1;
 
     e.detach();
+
+    this.fire('test')
+        .fire('foo')
+        .fire('bar');
 });
 
 Y.one('#name').on('click', function (e) {
@@ -57,14 +64,41 @@ Y.one('#thisOverride').on('click', function (e) {
 }, { tagName: 'Fred' });
 
 Y.one('#args').on('click', function (e, name, bool) {
-    e.get('currentTarget').one('span')._node.innerHTML = 
-        name + (bool ? '!' : ' :(');
+    this.one('span')._node.innerHTML = name + (bool ? '!' : ' :(');
 }, null, 'Fred', true);
 
 Y.one('#thisAndArgs').on('click', function (e, bool, lastName) {
     e.get('currentTarget').one('span')._node.innerHTML = 
         this.tagName + ' ' + lastName + (bool ? '!' : ' :(');
 }, { tagName: 'Angie' }, true, 'Good');
+
+// Custom events on Node and NodeList
+links.on('test', function (e) {
+    console.log('test custom event from the .x links nodelist: ', e);
+});
+increment.on('test', function (e) {
+    console.log('test custom event from the #increment node: ', e);
+});
+
+increment.publish({
+    foo: { defaultFn: function (e) { console.log('foo defaultFn', e); } },
+    bar: {
+        fire: function (target, e) {
+            this._super.fire.apply(this, arguments);
+            console.log('after the after() subs on bar', e);
+        }
+    }
+});
+
+increment.on('bar', function (e) {
+    console.log('on("bar")', e);
+});
+increment.after('bar', function (e) {
+    console.log('after("bar")', e);
+});
+
+// Just to make sure firing custom events works for NodeLists
+links.fire('test', { payload: 'Hi there' });
 
 });
 </script>
