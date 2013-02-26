@@ -4,7 +4,7 @@
     <title>Test Page</title>
 </head>
 <body class="yui3-skin-sam">
-<h3>Y.Event.on('click', prevent, '.x') - Prevent links except FB</h3>
+<h3>Y.on('click', prevent, '.x') - Prevent links except FB</h3>
 <ul>
     <li><a href="http://yahoo.com" class="x">Yahoo</a></li>
     <li><a href="http://google.com" class="x">Google</a></li>
@@ -12,7 +12,7 @@
     <li><a href="http://twitter.com" class="x">Twitter</a></li>
 </ul>
 
-<h3>Y.Event.on('click', incrementThenDetach, 'button.increment')</h3>
+<h3>Y.on('click', incrementThenDetach, 'button.increment')</h3>
 <button id="increment">Now helping #<span>0</span></button>
 
 <h3>override <code>this</code> and pass sub args</h3>
@@ -33,13 +33,13 @@ YUI({
 
 //var node = document.getElementById('x');
 
-Y.Event.on("click", function (e) {
+Y.on("click", function (e) {
     console.log("Treasure node clicked!", e);
     e.preventDefault();
     //e.detach();
 }, '.x');
 
-Y.Event.on('click', function (e) {
+Y.on('click', function (e) {
     var counter = this.getElementsByTagName('span')[0];
 
     counter.innerHTML = (+counter.innerHTML) + 1;
@@ -47,22 +47,22 @@ Y.Event.on('click', function (e) {
     e.detach();
 }, document.getElementById('increment'));
 
-Y.Event.on('click', function (e) {
+Y.on('click', function (e) {
     e.get('currentTarget').getElementsByTagName('span')[0].innerHTML =
         this.tagName;
 }, '#name');
 
-Y.Event.on('click', function (e) {
+Y.on('click', function (e) {
     e.get('currentTarget').getElementsByTagName('span')[0].innerHTML =
         this.tagName;
 }, '#thisOverride', { tagName: 'Fred' });
 
-Y.Event.on('click', function (e, name, bool) {
+Y.on('click', function (e, name, bool) {
     e.get('currentTarget').getElementsByTagName('span')[0].innerHTML =
         name + (bool ? '!' : ' :(');
 }, '#args', null, 'Fred', true);
 
-Y.Event.on('click', function (e, bool, lastName) {
+Y.on('click', function (e, bool, lastName) {
     e.get('currentTarget').getElementsByTagName('span')[0].innerHTML =
         this.tagName + ' ' + lastName + (bool ? '!' : ' :(');
 }, '#thisAndArgs', { tagName: 'Angie' }, true, 'Good');

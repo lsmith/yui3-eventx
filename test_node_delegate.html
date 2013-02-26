@@ -8,7 +8,7 @@
     <button id="unsub">Unsubscribe all</button>
 </p>
 
-<h3>Y.Event.delegate('click', prevent, '#links', '.x') - Prevent links except FB</h3>
+<h3>Y.one('#links').delegate('click', prevent, '.x') - Prevent links except FB</h3>
 <ul id="links">
     <li><a href="http://yahoo.com" class="x">Yahoo</a></li>
     <li><a href="http://google.com" class="x">Google</a></li>
@@ -16,7 +16,7 @@
     <li><a href="http://twitter.com" class="x">Twitter</a></li>
 </ul>
 
-<h3>Y.Event.delegate('click', incrementThenDetach, 'body', 'button.increment')</h3>
+<h3>Y.one('body').delegate('click', incrementThenDetach, 'button.increment')</h3>
 <button class="increment">Now helping #<span>0</span></button>
 
 <h3>override <code>this</code> and pass sub args</h3>
@@ -30,44 +30,47 @@
 <script src="http://yui.yahooapis.com/3.8.1/build/yui/yui.js"></script>
 <script src="event.js"></script>
 <script src="event-dom.js"></script>
+<script src="event-node.js"></script>
 <script src="event-delegate.js"></script>
 <script src="event-dom-delegate.js"></script>
+<script src="event-node-delegate.js"></script>
 <script>
 YUI({
     filter: 'raw'
-}).use('eventx-dom-delegate', function (Y) {
+}).use('eventx-node-delegate', function (Y) {
 
 var subs = [
-    Y.delegate("click", function (e) {
+    Y.one('#links').delegate("click", function (e) {
         console.log("link clicked!", e);
         e.preventDefault();
         //e.detach();
-    }, '#links', '.x'),
+    }, '.x'),
 
-    Y.delegate('click', function (e) {
-        var counter = this.getElementsByTagName('span')[0];
+    Y.one('body').delegate('click', function (e) {
+        var counter = this.one('span')._node;
 
         counter.innerHTML = (+counter.innerHTML) + 1;
 
         e.detach();
-    }, document.getElementsByTagName('body')[0], '.increment'),
+    }, '.increment'),
 
     /*
-    Y.delegate('click', function (e) {
+    Y.one('#buttons').delegate('click', function (e) {
         var currentTarget = e.get('currentTarget'),
-            name = currentTarget.getAttribute('data-name') || this.tagName;
+            name = currentTarget.getAttribute('data-name') ||
+                   this.get('tagName');
 
-        currentTarget.getElementsByTagName('span')[0].innerHTML = name;
-    }, '#buttons', 'button'),
+        currentTarget.one('span')._node.innerHTML = name;
+    }, 'button'),
     */
 
-    Y.delegate('click', function (e, bang, lastName) {
+    Y.one('#buttons').delegate('click', function (e, bang, lastName) {
         var currentTarget = e.get('currentTarget'),
             name = currentTarget.getAttribute('data-name') || this.tagName;
 
-        currentTarget.getElementsByTagName('span')[0].innerHTML =
-            name + ' ' + lastName + (bang ? '!' : ' :(');
-    }, '#buttons', 'button', { tagName: 'Fred' }, true, 'Good')
+        currentTarget.one('span')._node.innerHTML = name + ' ' + lastName +
+            (bang ? '!' : ' :(');
+    }, 'button', { tagName: 'Fred' }, true, 'Good')
 ];
 
 Y.on('click', function () {
