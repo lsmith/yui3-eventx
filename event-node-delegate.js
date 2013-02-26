@@ -8,13 +8,23 @@ Adds delegate support to Node and NodeList.
 **/
 var EventFacadeProto = Y.Event.EventFacade.prototype;
 
-// Node has already been augmented with EventTarget, so we only need to
-// add the delegate method to the 
-Y.augment(Y.Node, Y.EventTarget, true, ['delegate']);
+// Node has already been augmented with EventTarget, but we have to re-augment
+// to add the delegate method. If we augment with a whitelist of ['delegate']
+// to add only that method, calling delegate() will trigger the constructor,
+// but then calling any of the other EventTarget methods will trigger it again,
+// which will wipe out any event subscriptions added directly to the Node.
+Y.augment(Y.Node, Y.EventTarget, true);
 
-// Use the same getter for container as for currentTarget, which will cache a
-// Node instance in e.data.container if it's not found or the value in e.data
-// isn't currently a Node.
-EventFacadeProto._getter.container = EventFacadeProto._getter.currentTarget;
+// Override the getter for container to cache the Node instance in the data
+// collection.
+EventFacadeProto._getter.container = function () {
+    var container = this.data.container || this.details.container;
 
-}, '', { requires: [ 'eventx-dom-delegate', 'event-node' ] });
+    if (container && !(container instanceof Y.Node)) {
+        container = this.data.container = Y.one(container);
+    }
+
+    return container;
+};
+
+}, '', { requires: [ 'eventx-dom-delegate', 'eventx-node' ] });
