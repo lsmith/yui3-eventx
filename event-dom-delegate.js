@@ -6,76 +6,57 @@ Adds DOM event delegation support to Y.Event.
 @submodule eventx-dom-delegate
 **/
 var toArray = Y.Array,
+    isArray = Y.Lang.isArray,
     domTest = Y.getEvent('@dom').test;
 
-Y.Event.publish('@DEFAULT', {
-    // It's a shame that I had to duplicate so much logic from subscribe()
+Y.mix(Y.Event.DOMEvent, {
     delegate: function (target, args) {
-        var type       = args[0],
-            sub        = null,
-            isDOMEvent = Y.Node ?
-                            Y.Node.DOM_EVENTS[type] :
-                            Y.Event.isEventSupported(type),
-            event = !isDOMEvent &&
-                        this.getSmartEvent(target, args, 'delegate'),
-            isYEvent, i, len, type, el, subs, eventKey, needsDOMSub,
-            callback, filter, selector;
+        var type = args[0],
+            sub  = null,
+            el, eventKey, callback, filter, selector, subs, i, len;
 
-        if (event) {
-            return event.delegate ? event.delegate(target, args) : null;
-        }
-        
-        if (!isDOMEvent) {
-            // Custom event subscription
-            return this._super.delegate.call(this, target, args);
-        }
-
-        // DOM event subscription
         // Convert from arguments object to array
-        isYEvent = (target === Y.Event);
         args = toArray(args, 0, true);
-        el = Y.Event._resolveTarget(isYEvent ? args[2] : target);
+
+        if (target === Y) {
+            // delegate(type, callback, container, filter, thisObj, ...args)
+            // => delegate(type, callback, filter, thisObj, ...args)
+            target = args.splice(2,1)[0];
+        }
+
+        el = Y.Event._resolveTarget(target);
 
         if (el && el.nodeType) {
             callback = args[1];
-            filter   = args[isYEvent ? 3 : 2];
+            filter   = args[2];
 
             if (typeof filter === 'string') {
                 selector = filter;
                 filter   = this.selectorFilter
             }
 
-            // Remove the target and filter from args to allow thisObj and
-            // payload args to slide into their proper indices. Replace the
-            // callback with delegation callback.
-            args.splice(1, (isYEvent ? 3 : 2), this.delegateNotify);
+            // delegate(type, callback, filter, thisObj, ...args)
+            // => on(type, delegateNotify, thisObj, ...args)
+            args.splice(1, 2, this.delegateNotify);
 
+            // => on(eventKey, delegateNotify, thisObj, ...args)
             eventKey = args[0] = Y.stamp(el) + ':' + type;
 
-            sub = new this.Subscription(Y.Event, args, 'on', {
+            sub = new this.Subscription(Y, args, 'on', {
                 callback : callback,
                 filter   : filter,
                 container: el,
-                selector : selector
+                selector : selector,
+                domType  : type,
+                setThis  : !(args[2])
             });
 
-            this.registerSub(Y.Event, sub);
-
-            // First subscription needs a DOM subscription
-            if (Y.Event._yuievt.subs[eventKey].on.length === 1) {
-                YUI.Env.add(el, type, Y.Event._handleEvent, false);
-            }
+            this.registerSub(el, sub);
         // TODO: el could be a DOM collection ala getElementsByTagName()
         } else if (isArray(el)) {
             subs = [];
             for (i = 0, len = el.length; i < len; ++i) {
-                if (isYEvent) {
-                    args[2] = el[i];
-                } else {
-                    target = el[i];
-                }
-
-                subs.push(this.delegate(target, args));
+                subs.push(this.delegate(el[i], args));
             }
 
             // Return batch subscription
@@ -89,14 +70,12 @@ Y.Event.publish('@DEFAULT', {
         var sub     = e.subscription,
             details = sub && sub.details,
             filter  = details && details.filter,
-            container, target, currentTarget, defaultThisObj, i, len;
+            container, target, currentTarget, setThis, i, len;
 
         if (filter) {
-            // TODO: I'm here. This needs to be replaced with a parentAxis walk
-            // akin to current delegate implementation
-            container   = details.container;
-            defaultThis = (container === this);
-            target      = e._event.target || e._event.srcElement;
+            container = details.container;
+            target    = e._event.target || e._event.srcElement;
+            setThis   = details.setThis;
 
             e.set('container', container);
 
@@ -108,7 +87,7 @@ Y.Event.publish('@DEFAULT', {
                 e.set('currentTarget', target);
 
                 if (filter.call(sub, e)) {
-                    currentTarget = defaultThis ? e.get('currentTarget') : this;
+                    currentTarget = setThis ? e.get('currentTarget') : this;
                     // arguments contains e, which has had its currentTarget
                     // updated.
                     details.callback.apply(currentTarget, arguments);
@@ -124,31 +103,28 @@ Y.Event.publish('@DEFAULT', {
     },
 
     selectorFilter: function (e) {
-        var currentTarget = e.get('currentTarget'),
-            container     = e.get('container'),
+        var currentTarget = e.data.currentTarget,
+            container     = e.data.container,
             root          = currentTarget === container ? null : container;
 
         return Y.Selector.test(currentTarget, this.details.selector, root);
     }
-});
+}, true);
 
-// Republish the @dom smart event on Y to add support for delegate in the test.
-Y.publish('@dom', {
-    test: function (target, args, method) {
-        var match = domTest.apply(this, arguments),
-            filterType;
+Y.Event.EventFacade.prototype._getter.container = function () {
+    return this.details.container;
+};
 
-        if (match && method === 'delegate') {
-            filterType = typeof args[3];
+Y.publish('@DEFAULT', {
+    delegate: function (target, args) {
+        var event = Y.Event.DOM_EVENTS[args[0]] ||
+                    this.getSmartEvent(target, args, 'delegate');
 
-            match = (filterType === 'string' || filterType === 'function');
-        }
-
-        return match;
-    },
-
-    delegate: function () {
-        return Y.Event.delegate.apply(Y.Event, arguments);
+        return event ?
+            // DOM or smart event
+            event.delegate(target, args) :
+            // Default custom event
+            this._super.delegate.apply(this, arguments);
     }
 });
 
