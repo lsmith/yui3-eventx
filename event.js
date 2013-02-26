@@ -594,7 +594,7 @@ CustomEvent.prototype = {
         if (type && phase) {
             subs = allSubs[type];
 
-            if (!subs[phase].length) {
+            if (subs && !subs[phase].length) {
                 // This allows hasSubs to avoid returning false positives
                 subs[phase] = null;
 
