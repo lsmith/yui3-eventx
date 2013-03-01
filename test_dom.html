@@ -31,10 +31,8 @@ YUI({
     filter: 'raw'
 }).use('eventx-dom', function (Y) {
 
-//var node = document.getElementById('x');
-
 Y.on("click", function (e) {
-    console.log("Treasure node clicked!", e);
+    console.log("Link node clicked!", e);
     e.preventDefault();
     //e.detach();
 }, '.x');
@@ -67,24 +65,29 @@ Y.on('click', function (e, bool, lastName) {
         this.tagName + ' ' + lastName + (bool ? '!' : ' :(');
 }, '#thisAndArgs', { tagName: 'Angie' }, true, 'Good');
 
-Y.on('test', function (e) {
-    console.log('custom event from Y: ', e);
+Y.on('test', function (data) {
+    console.log('custom event from Y: ', data);
 });
 Y.publish({
-    foo: { defaultFn: function (e) { console.log('foo defaultFn', e); } },
+    foo: {
+        emitFacade: true,
+        defaultFn: function (e) {
+            console.log('foo defaultFn. Should be an EventFacade ->', e);
+        }
+    },
     bar: {
-        fire: function (target, e) {
+        fire: function (target, type, e) {
             this._super.fire.apply(this, arguments);
-            console.log('after the after() subs on bar', e);
+            console.log('after the after() subs on bar. Should be undefined ->', e);
         }
     }
 });
 
 Y.on('bar', function (e) {
-    console.log('on("bar")', e);
+    console.log('on("bar"). Should be undefined ->', e);
 });
 Y.after('bar', function (e) {
-    console.log('after("bar")', e);
+    console.log('after("bar"). Should be undefined ->', e);
 });
 
 Y.fire('test', { payload: 'Hi there' })
