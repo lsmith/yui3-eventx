@@ -207,6 +207,38 @@ Y.after("onetime", function (e) {
 Y.fire("test", { data: "ERROR: No subs for test event" });
 Y.fire("bar");
 
+console.log('testing new Y.EventTarget({ defaults })');
+var target = new Y.EventTarget({
+        emitFacade: true,
+        bubbles: false
+    }),
+    parent = new Y.EventTarget();
+
+target.addTarget(parent);
+
+target.on('test', function (e) {
+    console.log('#1 EventTarget. Should be EventFacade ->', e);
+});
+parent.on('test', function (e) {
+    console.log('ERROR: #3 EventTarget Should not have been fired. Should be EventFacade ->', e);
+});
+
+target.publish('@test', {
+    pattern: /not-test/,
+
+    subscribe: function (target, sub) {
+        var event = target.getEvent('test');
+        
+        return event.subscribe.apply(event, arguments);
+    }
+}, null, ['subscribe']);
+
+target.on('not-test', function (e) {
+    console.log('#2 EventTarget (smart event). Should be EventFacade ->', e);
+});
+
+target.fire('test');
+
 });
 </script>
 </body>
