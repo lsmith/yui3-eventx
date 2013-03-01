@@ -115,17 +115,4 @@ Y.Event.EventFacade.prototype._getter.container = function () {
     return this.details.container;
 };
 
-Y.publish('@DEFAULT', {
-    delegate: function (target, args) {
-        var event = Y.Event.DOM_EVENTS[args[0]] ||
-                    this.getSmartEvent(target, args, 'delegate');
-
-        return event ?
-            // DOM or smart event
-            event.delegate(target, args) :
-            // Default custom event
-            this._super.delegate.apply(this, arguments);
-    }
-});
-
 }, '', { requires: [ 'eventx-dom', 'eventx-delegate' ] });

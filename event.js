@@ -1299,6 +1299,7 @@ Y.mix(EventTarget, {
     * "subscribe"
     * "unsubscribe"
     * "fire"
+    * "delegate" (if eventx-delegate is also loaded)
 
     Smart events must have a method `test(target, argsArray, method)` that
     should return true if control should be routed to that event's appropriate

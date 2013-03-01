@@ -6,7 +6,6 @@ Adds delegate support to Node and NodeList.
 @submodule eventx-node-delegate
 @for Node
 **/
-var EventFacadeProto = Y.Event.EventFacade.prototype;
 
 // Node has already been augmented with EventTarget, but we have to re-augment
 // to add the delegate method. If we augment with a whitelist of ['delegate']
@@ -17,7 +16,7 @@ Y.augment(Y.Node, Y.EventTarget, true);
 
 // Override the getter for container to cache the Node instance in the data
 // collection.
-EventFacadeProto._getter.container = function () {
+Y.Event.FacadeEvent.prototype._getter.container = function () {
     var container = this.data.container || this.details.container;
 
     if (container && !(container instanceof Y.Node)) {

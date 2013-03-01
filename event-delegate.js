@@ -31,13 +31,14 @@ object map of event names to callbacks.
 @return {Subscription}
 **/
 Y.EventTarget.prototype.delegate = function (type) {
-    var event = this._yuievt.events[type],
-        args  = toArray(arguments, 0, true),
+    var events = this._yuievt.events,
+        event  = events[type],
+        args   = toArray(arguments, 0, true),
         i, len, subs;
 
     if (!event) {
         if (typeof type === 'string') {
-            event = this._yuievt.events['@DEFAULT'];
+            event = events['@delegate'] || events['@default'];
         } else if (isObject(type)) {
             subs = [];
             if (isArray(type)) {

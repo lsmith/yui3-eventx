@@ -16,7 +16,9 @@ var isArray = Y.Lang.isArray,
 
     EVENT_NAMES = 'abort beforeunload blur change click close command contextmenu dblclick DOMMouseScroll drag dragstart dragenter dragover dragleave dragend drop error focus key keydown keypress keyup load message mousedown mouseenter mouseleave mousemove mousemultiwheel mouseout mouseover mouseup mousewheel orientationchange reset resize select selectstart submit scroll textInput unload'.split(' '),
     DOM_EVENTS = {},
-    DOMEvent;
+    DOMEvent,
+
+    events, event;
 
 function DOMEventFacade(type, target, payload) {
     this._event = payload._event;
@@ -132,7 +134,7 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
 });
 
 DOMEvent = new Y.CustomEvent('@dom-event', {
-    subscribe: function (target, phase, args) {
+    subscribe: function (target, args, phase) {
         var type    = args[0],
             capture = (phase === 'capture'),
             phase   = capture ? 'capture' : 'on',
@@ -160,7 +162,7 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
         } else if (isArray(el)) {
             subs = [];
             for (i = 0, len = el.length; i < len; ++i) {
-                subs.push(this.subscribe(el[i], phase, args));
+                subs.push(this.subscribe(el[i], args, phase));
             }
 
             // Return batch subscription
@@ -281,7 +283,7 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
     },
 
     Event: DOMEventFacade
-});
+}, Y.CustomEvent.FacadeEvent);
 
 for (i = 0, len = EVENT_NAMES.length; i < len; ++i) {
     DOM_EVENTS[EVENT_NAMES[i]] = DOMEvent;
@@ -326,14 +328,14 @@ Y.Event = {
     @param {CustomEvent} [inheritsFrom] Event to use as the prototype before
                             customizations in _config_ are applied
     **/
-    publish: function (type, config, inheritsFrom) {
+    publish: function (type, config, inheritsFrom, smart) {
         // Default DOMEvent as base so Y.Event.publish('beforeunload')
         // is enough to whitelist a DOM event
         inheritsFrom || (inheritsFrom = Y.Event.DOMEvent);
 
         if (config || inheritsFrom !== Y.Event.DOMEvent) {
             Y.EventTarget._publish(Y.Event, Y.Event.DOM_EVENTS,
-                type, config, inheritsFrom);
+                type, config, inheritsFrom, smart);
         } else if (!Y.Event.DOM_EVENTS[type]) {
             Y.Event.DOM_EVENTS[type] = inheritsFrom;
         }
@@ -425,43 +427,16 @@ Y.Event = {
     }
 };
 
-Y.publish({
-    // Update the default event to add support for subscribing to DOM events
-    '@DEFAULT': {
-        subscribe: function (target, phase, args) {
-            var event = Y.Event.DOM_EVENTS[args[0]] ||
-                        this.getSmartEvent(target, args, 'subscribe');
+// Replace the events map for Y to include DOM events, allowing
+// Y.Event.publish(...) to add to Y's collection via prototypal inheritance.
+events = Y._yuievt.events;
+Y._yuievt.events = Y.Object(Y.Event.DOM_EVENTS);
 
-            return event ?
-                // DOM or smart event
-                event.subscribe(target, phase, args) :
-                // Default custom event
-                this._super.subscribe.apply(this, arguments);
-        },
-
-        unsubscribe: function (target, args) {
-            var event = Y.Event.DOM_EVENTS[args[0]] ||
-                        this.getSmartEvent(target, args, 'unsubscribe');
-
-            return event ?
-                // DOM or smart event
-                event.unsubscribe(target, args) :
-                // Default custom event
-                this._super.unsubscribe.apply(this, arguments);
-        },
-
-        fire: function (target, type, e, currentTarget) {
-            var event = Y.Event.DOM_EVENTS[type] ||
-                        this.getSmartEvent(target,
-                            toArray(arguments, 1, true), 'fire');
-
-            return event ?
-                // DOM or smart event
-                event.fire(target, type, e, currentTarget) :
-                // Default custom event
-                this._super.fire.apply(this, arguments);
-        }
+for (event in events) {
+    // ignore hasOwnProperty in favor of duck typing CustomEvent or Router
+    if (events[event].subscribe) {
+        Y._yuievt.events[event] = events[event];
     }
-});
+}
 
 }, '', { requires: [ 'eventx', 'selector' ] });

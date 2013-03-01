@@ -8,15 +8,26 @@ Adds EventTarget support to Node and NodeList.
 **/
 // Use Y.Event's base and default events for Node and NodeList
 var EventTarget  = Y.EventTarget,
-    events       = Y._yuievt.events,
-    baseEvent    = events['@BASE'],
-    defaultEvent = events['@DEFAULT'];
+    DEFAULT      = '@default',
+    defaultEvent = Y._yuievt.events[DEFAULT];
 
+// Manually replace the class events collection with a proto wrap of the
+// Y.Event.DOM_EVENTS collection so added DOM events will be available, but
+// events published on Y.Node won't pollute the shared DOM event collection.
 Y.augment(Y.Node, EventTarget);
-EventTarget.configure(Y.Node, null, baseEvent, defaultEvent);
+EventTarget.configure(Y.Node);
+Y.Node.events = Y.Object(Y.Event.DOM_EVENTS);
+Y.Node.events[DEFAULT] = defaultEvent;
 
+// Manually replace the class events collection with a proto wrap of the
+// Y.Event.DOM_EVENTS collection so added DOM events will be available, but
+// events published on Y.NodeList won't pollute the shared DOM event collection.
+// TODO: A separate proto wrap from Y.Node so custom events published on
+// NodeList are specific to NodeList. Should they be shared?
 Y.augment(Y.NodeList, EventTarget);
-EventTarget.configure(Y.NodeList, null, baseEvent, defaultEvent);
+EventTarget.configure(Y.NodeList);
+Y.NodeList.events = Y.Object(Y.Event.DOM_EVENTS);
+Y.NodeList.events[DEFAULT] = defaultEvent;
 
 function getNode(name) {
     // Allow setters to populate e.data[name] with a DOM element.
