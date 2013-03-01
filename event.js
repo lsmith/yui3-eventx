@@ -17,7 +17,6 @@ var isObject   = Y.Lang.isObject,
     ArrayProto = Array.prototype,
     push       = ArrayProto.push,
     slice      = ArrayProto.slice,
-    concat     = ArrayProto.concat,
 
     STRING     = 'string',
     BEFORE     = 'before',
@@ -952,11 +951,12 @@ Subscription.prototype = {
         // Avoid extra work if the subscription didn't bind additional callback
         // args.
         if (this.payload || arguments.length !== 1) {
-            args = this.payload ?
-                        concat.apply(arguments, this.payload) :
-                        arguments;
+            if (this.payload) {
+                args = toArray(arguments, 0, true);
+                push.apply(args, this.payload);
+            }
 
-            return this.callback.apply(thisObj, args);
+            return this.callback.apply(thisObj, args || arguments);
         } else {
             return this.callback.call(thisObj, e);
         }
@@ -1415,7 +1415,7 @@ Y.mix(EventTarget, {
                     event = Y.mix(
                         new CustomEvent(type,
                             inheritsFrom, CustomEvent.FacadeEvent),
-                        config);
+                        config, true);
                 } else {
                     event = new CustomEvent(type, config, inheritsFrom);
                 }
