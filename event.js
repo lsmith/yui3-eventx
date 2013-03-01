@@ -1426,17 +1426,12 @@ Y.mix(EventTarget, {
                 event.publish(target);
             }
 
-            if (smart) {
-                if (smart === true) {
-                    smart = ['subscribe', 'unsubscribe', 'fire'];
-                }
-
+            if (smart && isArray(smart)) {
                 for (i = smart.length - 1; i >= 0; --i) {
                     name = '@' + smart[i];
 
                     if (!events[name]) {
                         events[name] = new Y.CustomEvent.Router();
-                        events[name].init();
                     }
 
                     events[name].registerEvent(event);
@@ -1856,8 +1851,21 @@ Y.CustomEvent = CustomEvent;
 Y.EventFacade = EventFacade;
 Y.EventTarget = EventTarget;
 
+/**
+@for YUI
+@uses EventTarget
+**/
 // Add the EventTarget API to Y
 Y.mix(Y, Y.EventTarget.prototype, true);
 Y.EventTarget.call(Y);
+
+/**
+Global EventTarget that receives event notifications for events configured with
+`broadcast = 2`.
+
+@property Global
+@type {EventTarget}
+**/
+Y.Global = YUI.Env.globalEvents || (YUI.Env.globalEvents = new EventTarget());
 
 }, '', { requires: ['oop'] });
