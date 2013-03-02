@@ -32,6 +32,282 @@ var isObject   = Y.Lang.isObject,
 
 
 /**
+Class to encapsulate an event subscription. Stores the callback, execution
+context (`this` in the callback), and any bound arguments to pass to the
+callback after the event object.
+
+_args_ is expected to be an array containing:
+1. The event type (string)
+1. The subscription callback (function)
+1. Optionally the `this` object override for the callback. Defaults to _target_.
+1. Optionally any additional arguments to pass to the callback
+
+@class Subscription
+@param {EventTarget} target From whence the subscription was made
+@param {Array} args See above
+@param {String} phase The subscription phase
+@param {Any} details Data returned from the event's `parseSignature(args)`
+    method if it has one defined
+**/
+function Subscription(target, args, phase, details) {
+    // Ew, but convenient to have Subscription support wrapping a batch of
+    // subscriptions
+    if (args) {
+        this.target   = target;
+        this.phase    = phase;
+        this.details  = details;
+
+        this.type     = args[0];
+        this.callback = args[1];
+        this.thisObj  = args[2];
+
+        if (args.length > 3) {
+            this.payload = slice.call(args, 3);
+        }
+    } else if (isArray(target)) {
+        this.subs = target;
+    }
+}
+
+Subscription.prototype = {
+
+    /**
+    Call the subscribed callback with the provided event object, followed by
+    any bound subscription arguments.
+
+    @method notify
+    @param {Any} arg* Arguments to send to callbacks. For emitFacade events,
+                        there will be only one arg: the EventFacade object.
+    **/
+    notify: function (e) {
+        var thisObj = this.thisObj || this.target,
+            args;
+
+        // Avoid extra work if the subscription didn't bind additional callback
+        // args.
+        if (this.payload || arguments.length !== 1) {
+            if (this.payload) {
+                args = toArray(arguments, 0, true);
+                push.apply(args, this.payload);
+            }
+
+            return this.callback.apply(thisObj, args || arguments);
+        } else {
+            return this.callback.call(thisObj, e);
+        }
+    },
+
+    /**
+    Detaches the subscription from the subscribed target. Convenience for
+    `this.target.detach(this);`.
+
+    @method detach
+    **/
+    detach: function () {
+        var sub, i, len;
+
+        if (this.subs) {
+            for (i = 0, len = this.subs.length; i < len; ++i) {
+                sub = this.subs[i];
+
+                if (sub && sub.detach) {
+                    sub.detach();
+                }
+            }
+        } else {
+            this.target.detach(this);
+        }
+    }
+};
+
+/**
+Event object passed as the first parameter to event subscription callbacks.
+
+Data to distinguish each instance is supplied in the _payload_ array. If the
+first argument is an object (recommended), it is used to seed the event's `data`
+property, which is what houses the data for the `get()` and `set()` methods.
+
+All payload data in the passed array form is stored as the `details` property
+of the event's `data` collection. While it is recommended to use `get()` to
+access event data values, you can access the raw data at `e.data.details`.
+
+@class EventFacade
+@param {String} type The name of the event
+@param {EventTarget} target EventTarget from which `fire()` was called
+@param {Any[]} [payload] Data specific to this event, passed
+**/
+function EventFacade(type, target, payload) {
+    this.type    = type,
+    this.data    = (payload && isObject(payload[0])) ? payload[0] : {};
+
+    this.data.target  = target;
+    this.data.details = payload;
+}
+EventFacade.prototype = {
+    /**
+    Collection of getters to apply special logic to accessing certain data
+    properties. This is a shared object on the prototype, so be careful if you
+    modify it.
+
+    @property _getter
+    @type {Object}
+    @protected
+    **/
+    _getter: {},
+
+    /**
+    Collection of setters to apply special logic to assigning certain data
+    properties. This is a shared object on the prototype, so be careful if you
+    modify it.
+
+    @property _setter
+    @type {Object}
+    @protected
+    **/
+    _setter: {},
+
+    /**
+    Has `e.preventDefault()` been called on this event?
+
+    @property _prevented
+    @type {Boolean}
+    @default `false`
+    **/
+    _prevented: false,
+
+    /**
+    Has `e.stopPropagation()` or `e.stopImmediatePropagation()` been called on
+    this event?
+
+    Value will be one of:
+    * 0 - unstopped (default)
+    * 1 - `e.stopPropagation()` called
+    * 2 - `e.stopImmediatePropagation()` called
+
+    @property _prevented
+    @type {Number}
+    @default `0`
+    **/
+    _stopped  : 0,
+
+    /**
+    Disables any default behavior (`defaultFn`) associated with the event. This
+    will also prevent any `after()` subscribers from being executed.
+
+    @method preventDefault
+    @chainable
+    **/
+    preventDefault: function () {
+        this._prevented = true;
+
+        return this;
+    },
+
+    /**
+    Stops the event from bubbling to subsequent bubble targets. All subscribers
+    on the current bubble target will be executed.
+
+    Does not prevent the event's default behavior or its `after()` subscribers
+    from being called.
+
+    @method stopPropagation
+    @chainable
+    **/
+    stopPropagation: function () {
+        // It might have been stopped with 2 already
+        if (!this._stopped) {
+            this._stopped = 1;
+        }
+
+        return this;
+    },
+
+    /**
+    Stops the event from bubbling to subsequent bubble targets and stops
+    notification of additional subscribers on the current bubble target.
+
+    Does not prevent the event's default behavior or its `after()` subscribers
+    from being called.
+
+    @method stopImmediatePropagation
+    @chainable
+    **/
+    stopImmediatePropagation: function () {
+        this._stopped = 2;
+
+        return this;
+    },
+
+    /**
+    Convenience function to do both `e.preventDefault()` and
+    `e.stopPropagation()`. Pass a truthy value as _immediate_ to
+    `e.stopImmediatePropagation()` instead.
+
+    @method halt
+    @param {Boolean} [immediate] Trigger `e.stopImmediatePropagation()`
+    @chainable
+    **/
+    halt: function (immediate) {
+        this._prevented = true;
+        this._stopped = immediate ? 2 : 1;
+
+        return this;
+    },
+
+    /**
+    Detaches the subscription for this callback.
+
+    @method detach
+    @chainable
+    **/
+    detach: function () {
+        if (this.subscription && this.subscription.detach) {
+            this.subscription.detach();
+        }
+
+        return this;
+    },
+
+    /**
+    Get a property from the event's data collection supplied at event creation.
+    If a getter is defined for the property, its return value will be returned.
+    Otherwise, the property from the data collection, if present, will be
+    returned.
+
+    @method get
+    @param {String} name Data property name
+    @return {Any} whatever is stored in the data property
+    **/
+    get: function (name) {
+        if (this._getter[name]) {
+            return this._getter[name].call(this, name);
+        } else {
+            return (name in this.data) ? this.data[name] : this[name];
+        }
+    },
+
+    /**
+    Set a property in the event's data collection. If a setter is defined for
+    the property, it will be called with the _name_ and _val_. Otherwise, the
+    property and value will be assigned to the data collection directly.
+
+    @method set
+    @param {String} name Data property name
+    @param {Any} val The value to assign
+    @chainable
+    **/
+    set: function (name, val) {
+        if (this._setter[name]) {
+            this._setter[name].call(this, name, val);
+        } else {
+            this.data[name] = val;
+        }
+
+        return this;
+    }
+};
+
+/**
 Collection of behaviors for subscribing to and firing a named custom event.
 This class is meant to be a scaffolding for customizations. The default
 method implementations support the following customizations:
@@ -374,7 +650,7 @@ CustomEvent.prototype = {
                     push.apply(targets, target._yuievt.bubblePath);
                 }
             }
-        };
+        }
 
         // Less than ideal that this relies on insertion order, which isn't
         // required by spec. But to date, only V8 returns keys out of order,
@@ -412,7 +688,7 @@ CustomEvent.prototype = {
     @param {Boolean} `false` if a subscriber halted the event
     **/
     notify: function (path, type, payload, phase) {
-        var i, len, target, subs, j, jlen, sub, ret;
+        var i, len, subs, j, jlen, ret;
 
         payload || (payload = []);
 
@@ -472,7 +748,7 @@ CustomEvent.prototype = {
     unsubscribe: function (target, args) {
         var type    = args[0],
             allSubs = target._yuievt.subs,
-            i, len, subs, sub, phase, abort, cleanup;
+            i, len, subs, sub, phase, cleanup;
 
         // Custom detach() can return truthy value to abort the unsubscribe
         if (this.detach && this.detach.apply(this, args)) {
@@ -790,7 +1066,7 @@ class/instance has any smart events published on it.
 **/
 CustomEvent.Router = function () {
     this.events = [];
-}
+};
 
 CustomEvent.Router.prototype = {
     /**
@@ -896,282 +1172,6 @@ CustomEvent.Router.prototype = {
     }
 };
 
-/**
-Class to encapsulate an event subscription. Stores the callback, execution
-context (`this` in the callback), and any bound arguments to pass to the
-callback after the event object.
-
-_args_ is expected to be an array containing:
-1. The event type (string)
-1. The subscription callback (function)
-1. Optionally the `this` object override for the callback. Defaults to _target_.
-1. Optionally any additional arguments to pass to the callback
-
-@class Subscription
-@param {EventTarget} target From whence the subscription was made
-@param {Array} args See above
-@param {String} phase The subscription phase
-@param {Any} details Data returned from the event's `parseSignature(args)`
-    method if it has one defined
-**/
-function Subscription(target, args, phase, details) {
-    // Ew, but convenient to have Subscription support wrapping a batch of
-    // subscriptions
-    if (args) {
-        this.target   = target;
-        this.phase    = phase;
-        this.details  = details;
-
-        this.type     = args[0];
-        this.callback = args[1];
-        this.thisObj  = args[2];
-
-        if (args.length > 3) {
-            this.payload = slice.call(args, 3);
-        }
-    } else if (isArray(target)) {
-        this.subs = target;
-    }
-}
-
-Subscription.prototype = {
-
-    /**
-    Call the subscribed callback with the provided event object, followed by
-    any bound subscription arguments.
-
-    @method notify
-    @param {Any} arg* Arguments to send to callbacks. For emitFacade events,
-                        there will be only one arg: the EventFacade object.
-    **/
-    notify: function (e) {
-        var thisObj = this.thisObj || this.target,
-            args;
-
-        // Avoid extra work if the subscription didn't bind additional callback
-        // args.
-        if (this.payload || arguments.length !== 1) {
-            if (this.payload) {
-                args = toArray(arguments, 0, true);
-                push.apply(args, this.payload);
-            }
-
-            return this.callback.apply(thisObj, args || arguments);
-        } else {
-            return this.callback.call(thisObj, e);
-        }
-    },
-
-    /**
-    Detaches the subscription from the subscribed target. Convenience for
-    `this.target.detach(this);`.
-
-    @method detach
-    **/
-    detach: function () {
-        var sub, i, len;
-
-        if (this.subs) {
-            for (i = 0, len = this.subs.length; i < len; ++i) {
-                sub = this.subs[i];
-
-                if (sub && sub.detach) {
-                    sub.detach();
-                }
-            }
-        } else {
-            this.target.detach(this);
-        }
-    }
-};
-
-
-/**
-Event object passed as the first parameter to event subscription callbacks.
-
-Data to distinguish each instance is supplied in the _payload_ array. If the
-first argument is an object (recommended), it is used to seed the event's `data`
-property, which is what houses the data for the `get()` and `set()` methods.
-
-All payload data in the passed array form is stored as the `details` property
-of the event's `data` collection. While it is recommended to use `get()` to
-access event data values, you can access the raw data at `e.data.details`.
-
-@class EventFacade
-@param {String} type The name of the event
-@param {EventTarget} target EventTarget from which `fire()` was called
-@param {Any[]} [payload] Data specific to this event, passed
-**/
-function EventFacade(type, target, payload) {
-    this.type    = type,
-    this.data    = (payload && isObject(payload[0])) ? payload[0] : {};
-
-    this.data.target  = target;
-    this.data.details = payload;
-}
-EventFacade.prototype = {
-    /**
-    Collection of getters to apply special logic to accessing certain data
-    properties. This is a shared object on the prototype, so be careful if you
-    modify it.
-
-    @property _getter
-    @type {Object}
-    @protected
-    **/
-    _getter: {},
-
-    /**
-    Collection of setters to apply special logic to assigning certain data
-    properties. This is a shared object on the prototype, so be careful if you
-    modify it.
-
-    @property _setter
-    @type {Object}
-    @protected
-    **/
-    _setter: {},
-
-    /**
-    Has `e.preventDefault()` been called on this event?
-
-    @property _prevented
-    @type {Boolean}
-    @default `false`
-    **/
-    _prevented: false,
-
-    /**
-    Has `e.stopPropagation()` or `e.stopImmediatePropagation()` been called on
-    this event?
-
-    Value will be one of:
-    * 0 - unstopped (default)
-    * 1 - `e.stopPropagation()` called
-    * 2 - `e.stopImmediatePropagation()` called
-
-    @property _prevented
-    @type {Number}
-    @default `0`
-    **/
-    _stopped  : 0,
-
-    /**
-    Disables any default behavior (`defaultFn`) associated with the event. This
-    will also prevent any `after()` subscribers from being executed.
-
-    @method preventDefault
-    @chainable
-    **/
-    preventDefault: function () {
-        this._prevented = true;
-
-        return this;
-    },
-
-    /**
-    Stops the event from bubbling to subsequent bubble targets. All subscribers
-    on the current bubble target will be executed.
-
-    Does not prevent the event's default behavior or its `after()` subscribers
-    from being called.
-
-    @method stopPropagation
-    @chainable
-    **/
-    stopPropagation: function () {
-        // It might have been stopped with 2 already
-        if (!this._stopped) {
-            this._stopped = 1;
-        }
-
-        return this;
-    },
-
-    /**
-    Stops the event from bubbling to subsequent bubble targets and stops
-    notification of additional subscribers on the current bubble target.
-
-    Does not prevent the event's default behavior or its `after()` subscribers
-    from being called.
-
-    @method stopImmediatePropagation
-    @chainable
-    **/
-    stopImmediatePropagation: function () {
-        this._stopped = 2;
-
-        return this;
-    },
-
-    /**
-    Convenience function to do both `e.preventDefault()` and
-    `e.stopPropagation()`. Pass a truthy value as _immediate_ to
-    `e.stopImmediatePropagation()` instead.
-
-    @method halt
-    @param {Boolean} [immediate] Trigger `e.stopImmediatePropagation()`
-    @chainable
-    **/
-    halt: function (immediate) {
-        this._prevented = true;
-        this._stopped = immediate ? 2 : 1;
-
-        return this;
-    },
-
-    /**
-    Detaches the subscription for this callback.
-
-    @method detach
-    @chainable
-    **/
-    detach: function () {
-        if (this.subscription && this.subscription.detach) {
-            this.subscription.detach();
-        }
-
-        return this;
-    },
-
-    /**
-    Get a property from the event's data collection supplied at event creation.
-    If a getter is defined for the property, its return value will be returned.
-    Otherwise, the property from the data collection, if present, will be
-    returned.
-
-    @method get
-    @param {String} name Data property name
-    @return {Any} whatever is stored in the data property
-    **/
-    get: function (name) {
-        if (this._getter[name]) {
-            return this._getter[name].call(this, name);
-        } else {
-            return (name in this.data) ? this.data[name] : this[name];
-        }
-    },
-
-    /**
-    Set a property in the event's data collection. If a setter is defined for
-    the property, it will be called with the _name_ and _val_. Otherwise, the
-    property and value will be assigned to the data collection directly.
-
-    @method set
-    @param {String} name Data property name
-    @param {Any} val The value to assign
-    @chainable
-    **/
-    set: function (name, val) {
-        if (this._setter[name]) {
-            this._setter[name].call(this, name, val);
-        } else {
-            this.data[name] = val;
-        }
-
-        return this;
-    }
-};
 
 
 /**
@@ -1232,14 +1232,14 @@ Y.mix(EventTarget, {
     configure: function (Class, events, defaultEvent) {
         var superEvents = Class.superclass &&
                           Class.superclass.constructor.events,
-            superEvent, eventClass;
+            superEvent;
 
         // Add the static publish method to the class
         Class.publish = function (type, config, inheritsFrom, smart) {
             // bind to the class for portability
             return Y.EventTarget._publish(Class, Class.events,
                         type, config, inheritsFrom, smart);
-        }
+        };
 
         if (!Class.events) {
             Class.events = {};
@@ -1370,7 +1370,7 @@ Y.mix(EventTarget, {
     **/
     _publish: function (target, events, type, config, inheritsFrom, smart) {
         var CustomEvent = Y.CustomEvent,
-            event, i, name, emitFacade;
+            event, i, name;
 
         if (isObject(type)) {
             for (event in type) {
@@ -1501,7 +1501,7 @@ EventTarget.prototype = {
     getEvent: function (type, args, method) {
         var events = this._yuievt.events,
             event  = events[type],
-            smart, i, len;
+            smart;
 
         if (!event) {
             smart = events['@' + method];
