@@ -6,7 +6,6 @@ YUI.add('eventx', function (Y) {
  */
 
 // TODO:
-// - Implement broadcast?
 // - Add support for internal/locked subscriptions (can detach internally only)
 var isObject   = Y.Lang.isObject,
     isArray    = Y.Lang.isArray,
@@ -42,8 +41,12 @@ _args_ is expected to be an array containing:
 1. Optionally the `this` object override for the callback. Defaults to _target_.
 1. Optionally any additional arguments to pass to the callback
 
-@class Subscription
-@param {EventTarget} target From whence the subscription was made
+Alternately, can be used to encapsulate a set of Subscriptions by passing an
+array of Subscription objects as _type_.
+
+@class CustomEvent.Subscription
+@param {EventTarget|CustomEvent.Subscription[]} target From whence the
+                    subscription was made or an array of subscriptions
 @param {Array} args See above
 @param {String} phase The subscription phase
 @param {Any} details Data returned from the event's `parseSignature(args)`
@@ -81,20 +84,32 @@ Subscription.prototype = {
     **/
     notify: function (e) {
         var thisObj = this.thisObj || this.target,
-            args;
+            numArgs = arguments.length,
+            args, ret;
 
         // Avoid extra work if the subscription didn't bind additional callback
         // args.
-        if (this.payload || arguments.length !== 1) {
+        if (numArgs === 1 && !this.payload) {
+            ret = this.callback.call(thisObj, e);
+        } else {
+            args = numArgs ? toArray(arguments, 0, true) : [];
+
             if (this.payload) {
-                args = toArray(arguments, 0, true);
                 push.apply(args, this.payload);
             }
 
-            return this.callback.apply(thisObj, args || arguments);
-        } else {
-            return this.callback.call(thisObj, e);
+            ret = this.callback.apply(thisObj, args);
         }
+
+        // Unfortunate cost of back compat. Would rather deprecate once and
+        // onceAfter in favor of e.detach(), but that would still leave
+        // non-emitting events to have to detach( args or sub ). Still,
+        // I think that's fine to require that!
+        if (this.once) {
+            this.detach();
+        }
+
+        return ret;
     },
 
     /**
@@ -622,9 +637,6 @@ CustomEvent.prototype = {
     [A, B, D, E, C, F] (depth-first).  Also note duplicate targets are
     ignored.  The first appearance in the bubble path wins.
     
-    If the event is configured with `broadcast` of 1, `Y` will be added to the
-    end of the bubble path. If 2, `Y.Global` after that.
-
     @method resolveBubblePath
     @param root {Object} the origin of the event to bubble (A in the diagram)
     @return {Array} the ordered list of target instances
@@ -685,7 +697,7 @@ CustomEvent.prototype = {
     @param {String} type The name of the event
     @param {Any[]} payload The arguments to pass to the subscription callback
     @param {String} phase The phase of subscribers on the targets to notify
-    @param {Boolean} `false` if a subscriber halted the event
+    @return {Boolean} `false` if a subscriber halted the event
     **/
     notify: function (path, type, payload, phase) {
         var i, len, subs, j, jlen, ret;
@@ -697,6 +709,9 @@ CustomEvent.prototype = {
             subs = subs && subs[phase];
 
             if (subs) {
+                // Snapshot subscriber list to avoid array changing during
+                // notifications (e.g. once() detaches)
+                subs = subs.slice();
                 for (j = 0, jlen = subs.length; j < jlen; ++j) {
                     ret = subs[j].notify.apply(subs[j], payload);
 
@@ -788,10 +803,14 @@ CustomEvent.prototype = {
                 if (callback) {
                     // Use case: detach(type, callback, phase)
                     subs = subs[phase];
-                    for (i = subs.length - 1; i >= 0; --i) {
-                        if (subs[i].callback === callback) {
-                            subs.splice(i, 1);
-                            break;
+
+                    if (subs) {
+                        for (i = subs.length - 1; i >= 0; --i) {
+                            if (subs[i].callback === callback) {
+                                subs.splice(i, 1);
+                                // Don't break - back compat requires removing
+                                // all that match callback
+                            }
                         }
                     }
                 } else {
@@ -809,7 +828,7 @@ CustomEvent.prototype = {
         if (type && phase) {
             subs = allSubs[type];
 
-            if (subs && !subs[phase].length) {
+            if (subs && (!subs[phase] || !subs[phase].length)) {
                 // This allows hasSubs to avoid returning false positives
                 subs[phase] = null;
 
@@ -823,6 +842,8 @@ CustomEvent.prototype = {
                 }
 
                 if (cleanup) {
+                    // TODO: try to reset _yuievt.subs to {} if this was the
+                    // last subscription to any event?
                     allSubs[type] = null;
                 }
             }
@@ -907,16 +928,17 @@ CustomEvent.FacadeEvent = new CustomEvent('@facade', {
 
             // default/stop/prevent behavior
             if (event._stopped && this.stoppedFn) {
-                this.stoppedFn.call(target, event);
+                (target[this.stoppedFn] || this.stoppedFn).call(target, event);
             }
 
             if (event._prevented && this.preventedFn) {
-                this.preventedFn.call(target, event);
+                (target[this.preventedFn] || this.preventedFn)
+                    .call(target, event);
             }
         }
 
         if (this.defaultFn && !event._prevented) {
-            this.defaultFn.call(target, event);
+            (target[this.defaultFn] || this.defaultFn).call(target, event);
         }
 
         // after() subscribers. defaultFn can stopImmediatePropagation()
@@ -973,6 +995,9 @@ CustomEvent.FacadeEvent = new CustomEvent('@facade', {
             subs   = subs && subs[phase]; // or none for this phase
 
             if (subs && subs.length) {
+                // Snapshot subscriber list to avoid array changing during
+                // notifications (e.g. once() detaches)
+                subs = subs.slice();
                 event.data.currentTarget = target;
 
                 for (j = 0, jlen = subs.length; j < jlen; ++j) {
@@ -1687,6 +1712,76 @@ EventTarget.prototype = {
     },
 
     /**
+    Subscribe to the next firing of a specified event on this object.
+    Subscribers in this "before" phase will have access to prevent any default
+    event behaviors (if the event permits prevention).
+    
+    Behaves as `on()`, but automatically detaches the subscription after the
+    callback has been notified.
+    
+    For facade emitting events, it is recommended to use `e.detach()` in the
+    callback rather than `once()`.
+
+    @method once
+    @param {String} type event type to subcribe to
+    @param {Any*} sigArgs see note in `on()` for default signature
+    @return {Subscription}
+    **/
+    once: function () {
+        var sub = this.on.apply(this, arguments),
+            i;
+
+        if (sub) {
+            if (sub.subs) {
+                for (i = sub.subs.length - 1; i >= 0; --i) {
+                    if (sub.subs[i]) {
+                        sub.subs[i].once = true;
+                    }
+                }
+            } else {
+                sub.once = true;
+            }
+        }
+
+        return sub;
+    },
+
+    /**
+    Subscribe to the next firing of the specified event on this object.
+    Subscribers in this "after" phase will not have access to prevent any
+    default behaviors, and will not be executed if the default behavior was
+    prevented by an `on()` subscriber.
+    
+    Behaves as `after()`, but automatically detaches the subscription after the
+    callback has been notified.
+    
+    For facade emitting events, it is recommended to use `e.detach()` in the
+    callback rather than `onceAfter()`.
+
+    @method onceAfter
+    @param {String} type event type to subcribe to
+    @param {Any*} sigArgs see note in `after()` for default signature
+    @return {Subscription}
+    **/
+    onceAfter: function () {
+        var sub = this.after.apply(this, arguments);
+
+        if (sub) {
+            if (sub.subs) {
+                for (i = sub.subs.length - 1; i >= 0; --i) {
+                    if (sub.subs[i]) {
+                        sub.subs[i].once = true;
+                    }
+                }
+            } else {
+                sub.once = true;
+            }
+        }
+
+        return sub;
+    },
+
+    /**
     Trigger the execution of subscribers to a specific event. The default
     notification order for events is:
 
@@ -1850,6 +1945,8 @@ EventTarget.configure(EventTarget);
 Y.CustomEvent = CustomEvent;
 Y.EventFacade = EventFacade;
 Y.EventTarget = EventTarget;
+// Alias for partial back compat
+Y.Subscriber  = Y.CustomEvent.Subscription;
 
 /**
 @for YUI
@@ -1860,8 +1957,8 @@ Y.mix(Y, Y.EventTarget.prototype, true);
 Y.EventTarget.call(Y);
 
 /**
-Global EventTarget that receives event notifications for events configured with
-`broadcast = 2`.
+Global EventTarget that can be used to communicate between YUI instances (using
+events, presumably).
 
 @property Global
 @type {EventTarget}
