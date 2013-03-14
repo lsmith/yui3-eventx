@@ -19,23 +19,7 @@ function C(name) {
     Y.EventTarget.call(this);
 }
 Y.extend(C, Y.EventTarget);
-Y.EventTarget.configure(C, {
-    foo: { bubbles: false },
-    bar: {
-        defaultFn: function () {
-            console.log("bar event behavior");
-        },
-        preventedFn: function () {
-            console.log("bar behavior prevented");
-        }
-    },
-    onetime: {
-        fireOnce: true,
-        defaultFn: function () {
-            console.log("One Time event behavior - this should only be logged once");
-        }
-    }
-});
+Y.EventTarget.configure(C, null, { emitFacade: true });
 
 var c = new C("Little C"),
     bigC = new C("Big C"),

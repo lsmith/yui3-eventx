@@ -17,17 +17,20 @@ function C(name) {
     this.name = name;
     Y.EventTarget.call(this);
 }
-Y.extend(C, Y.EventTarget);
+Y.extend(C, Y.EventTarget, {
+    _defaultBarFn: function () {
+        console.log("bar defaultFn");
+    },
+    _preventBarFn: function () {
+        console.log("bar preventedFn");
+    }
+});
 Y.EventTarget.configure(C, {
     foo: { bubbles: false },
     bar: {
         emitFacade: true,
-        defaultFn: function () {
-            console.log("bar defaultFn");
-        },
-        preventedFn: function () {
-            console.log("bar defaultFn");
-        }
+        defaultFn: '_defaultBarFn',
+        preventedFn: '_preventBarFn'
     },
     onetime: {
         emitFacade: true,
@@ -125,14 +128,16 @@ c.fire("bar");
 
 console.log('And now for the Y tests');
 
+Y._defaultYBarFn = function () {
+    console.log("bar defaultFn on Y");
+};
+
 Y.publish({
     bar: {
         emitFacade: true,
-        defaultFn: function () {
-            console.log("bar defaultFn");
-        },
+        defaultFn: '_defaultYBarFn',
         preventedFn: function () {
-            console.log("bar defaultFn");
+            console.log("bar preventedFn on Y");
         }
     },
     onetime: {
