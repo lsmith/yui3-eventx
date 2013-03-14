@@ -6,8 +6,7 @@ Adds DOM event delegation support to Y.Event.
 @submodule eventx-dom-delegate
 **/
 var toArray = Y.Array,
-    isArray = Y.Lang.isArray,
-    domTest = Y.getEvent('@dom').test;
+    isArray = Y.Lang.isArray;
 
 Y.mix(Y.Event.DOMEvent, {
     delegate: function (target, args) {
@@ -32,7 +31,7 @@ Y.mix(Y.Event.DOMEvent, {
 
             if (typeof filter === 'string') {
                 selector = filter;
-                filter   = this.selectorFilter
+                filter   = this.selectorFilter;
             }
 
             // delegate(type, callback, filter, thisObj, ...args)
@@ -70,7 +69,7 @@ Y.mix(Y.Event.DOMEvent, {
         var sub     = e.subscription,
             details = sub && sub.details,
             filter  = details && details.filter,
-            container, target, currentTarget, setThis, i, len;
+            container, target, currentTarget, setThis;
 
         if (filter) {
             container = details.container;
@@ -93,7 +92,7 @@ Y.mix(Y.Event.DOMEvent, {
                     details.callback.apply(currentTarget, arguments);
                 }
 
-                if (e._stopped || target === container) {
+                if (e.stopped || target === container) {
                     break;
                 }
 
@@ -112,7 +111,10 @@ Y.mix(Y.Event.DOMEvent, {
 }, true);
 
 Y.Event.EventFacade.prototype._getter.container = function () {
-    return this.details.container;
+    return this.data.container ||
+           (this.subscription &&
+            this.subscription.details &&
+            this.subscription.details.container);
 };
 
 }, '', { requires: [ 'eventx-dom', 'eventx-delegate' ] });
