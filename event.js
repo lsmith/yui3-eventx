@@ -1,4 +1,4 @@
-YUI.add('eventx', function (Y) {
+YUI.add('eventx-base', function (Y) {
 /**
  * Alternate event API augmentation class.
  *
@@ -12,7 +12,6 @@ var isObject   = Y.Lang.isObject,
     proto      = Y.Object,
     toArray    = Y.Array,
     arrayIndex = toArray.indexOf, // Y.Array.indexOf
-    values     = proto.values,    // Y.Object.values
     ArrayProto = Array.prototype,
     push       = ArrayProto.push,
     slice      = ArrayProto.slice,
@@ -75,31 +74,23 @@ function Subscription(target, args, phase, details) {
 Subscription.prototype = {
 
     /**
-    Call the subscribed callback with the provided event object, followed by
+    Call the subscribed callback with the provided arguments, followed by
     any bound subscription arguments.
 
     @method notify
-    @param {Any} arg* Arguments to send to callbacks. For emitFacade events,
-                        there will be only one arg: the EventFacade object.
+    @param {Any[]} [args] Array of arguments to send to callbacks. For
+                            emitFacade events, there will be only one arg: the
+                            EventFacade object.
     **/
-    notify: function (e) {
+    notify: function (args) {
         var thisObj = this.thisObj || this.target,
-            numArgs = arguments.length,
-            args, ret;
+            ret;
 
-        // Avoid extra work if the subscription didn't bind additional callback
-        // args.
-        if (numArgs === 1 && !this.payload) {
-            ret = this.callback.call(thisObj, e);
-        } else {
-            args = numArgs ? toArray(arguments, 0, true) : [];
-
-            if (this.payload) {
-                push.apply(args, this.payload);
-            }
-
-            ret = this.callback.apply(thisObj, args);
+        if (this.payload) {
+            args = args ? args.concat(this.payload) : this.payload;
         }
+
+        ret = this.callback.apply(thisObj, args);
 
         // Unfortunate cost of back compat. Would rather deprecate once and
         // onceAfter in favor of e.detach(), but that would still leave
@@ -152,12 +143,24 @@ access event data values, you can access the raw data at `e.data.details`.
 @param {Any[]} [payload] Data specific to this event, passed
 **/
 function EventFacade(type, target, payload) {
-    this.type    = type,
-    this.data    = (payload && isObject(payload[0])) ? payload[0] : {};
+    var data;
 
-    this.data.target  = target;
-    this.data.details = payload;
+    this.type = type;
+
+    if (payload) {
+        this.details = payload;
+
+        payload = payload[0];
+
+        if (isObject(payload, true)) {
+            data = (payload instanceof EventFacade) ? payload.data : payload;
+        }
+    }
+
+    this.data = data || {};
+    this.data.target = target;
 }
+
 EventFacade.prototype = {
     /**
     Collection of getters to apply special logic to accessing certain data
@@ -168,7 +171,9 @@ EventFacade.prototype = {
     @type {Object}
     @protected
     **/
-    _getter: {},
+    _getter: {
+        details: function () { return this.details; }
+    },
 
     /**
     Collection of setters to apply special logic to assigning certain data
@@ -184,11 +189,11 @@ EventFacade.prototype = {
     /**
     Has `e.preventDefault()` been called on this event?
 
-    @property _prevented
+    @property prevented
     @type {Boolean}
     @default `false`
     **/
-    _prevented: false,
+    prevented: false,
 
     /**
     Has `e.stopPropagation()` or `e.stopImmediatePropagation()` been called on
@@ -199,11 +204,11 @@ EventFacade.prototype = {
     * 1 - `e.stopPropagation()` called
     * 2 - `e.stopImmediatePropagation()` called
 
-    @property _prevented
+    @property prevented
     @type {Number}
     @default `0`
     **/
-    _stopped  : 0,
+    stopped  : 0,
 
     /**
     Disables any default behavior (`defaultFn`) associated with the event. This
@@ -213,7 +218,7 @@ EventFacade.prototype = {
     @chainable
     **/
     preventDefault: function () {
-        this._prevented = true;
+        this.prevented = true;
 
         return this;
     },
@@ -230,8 +235,8 @@ EventFacade.prototype = {
     **/
     stopPropagation: function () {
         // It might have been stopped with 2 already
-        if (!this._stopped) {
-            this._stopped = 1;
+        if (!this.stopped) {
+            this.stopped = 1;
         }
 
         return this;
@@ -248,7 +253,7 @@ EventFacade.prototype = {
     @chainable
     **/
     stopImmediatePropagation: function () {
-        this._stopped = 2;
+        this.stopped = 2;
 
         return this;
     },
@@ -263,8 +268,8 @@ EventFacade.prototype = {
     @chainable
     **/
     halt: function (immediate) {
-        this._prevented = true;
-        this._stopped = immediate ? 2 : 1;
+        this.prevented = true;
+        this.stopped = immediate ? 2 : 1;
 
         return this;
     },
@@ -321,6 +326,20 @@ EventFacade.prototype = {
         return this;
     }
 };
+
+if (Object.defineProperties) {
+    Object.defineProperties(EventFacade.prototype, {
+        target: {
+            get: function () { return this.get('target'); },
+            set: function (val) { this.set('target', val); }
+        },
+        currentTarget: {
+            get: function () { return this.get('currentTarget'); },
+            set: function (val) { this.set('currentTarget', val); }
+        }
+    });
+}
+
 
 /**
 Collection of behaviors for subscribing to and firing a named custom event.
@@ -599,7 +618,7 @@ CustomEvent.prototype = {
             } : {
                 subscribe : this.immediate,
                 // cache the event it was initially fired with
-                _firedWith: payload
+                _firedWith: payload || []
             });
         }
     },
@@ -643,11 +662,12 @@ CustomEvent.prototype = {
     **/
     resolveBubblePath: function (root) {
         var targets = [root],
-            path    = {},
-            target, yuid;
+            known   = {},
+            path    = [],
+            target, yuid, i;
 
-        // Add to the end of the path as we iterate.  This creates a bubble
-        // path where A's immediate bubble targets are all notified, then
+        // Add to the end of the targets array as we iterate.  This creates a
+        // bubble path where A's immediate bubble targets are all notified, then
         // each of their respective bubble targets are notified and so on.
         // (breadth first)
         for (i = 0; i < targets.length; ++i) {
@@ -655,22 +675,20 @@ CustomEvent.prototype = {
             yuid   = target._yuievt && Y.stamp(target);
 
             // protect against infinite loops
-            if (yuid && !path[yuid]) {
-                path[yuid] = target;
+            if (yuid && !known[yuid]) {
+                known[yuid] = true;
+                path.push(target);
 
                 if (target._yuievt.bubblePath) {
+                    // Push this target's bubble targets to the end of the
+                    // targets array we're looping over.
                     push.apply(targets, target._yuievt.bubblePath);
                 }
             }
         }
 
-        // Less than ideal that this relies on insertion order, which isn't
-        // required by spec. But to date, only V8 returns keys out of order,
-        // and that's specifically when they are numeric. yuid stamps
-        // are strings. This would be a horrifying bug to track down, but it
-        // simplifies the logic and seems pragmatic given the current
-        // commitment of JS engine authors not to break the web.
-        return values(path);
+
+        return path;
     },
 
     /**
@@ -702,8 +720,6 @@ CustomEvent.prototype = {
     notify: function (path, type, payload, phase) {
         var i, len, subs, j, jlen, ret;
 
-        payload || (payload = []);
-
         for (i = 0, len = path.length; i < len && ret !== false; ++i) {
             subs = path[i]._yuievt.subs[type];
             subs = subs && subs[phase];
@@ -713,10 +729,15 @@ CustomEvent.prototype = {
                 // notifications (e.g. once() detaches)
                 subs = subs.slice();
                 for (j = 0, jlen = subs.length; j < jlen; ++j) {
-                    ret = subs[j].notify.apply(subs[j], payload);
+                    ret = subs[j].notify(payload);
 
                     // Erg, I hate the return false support
                     if (ret === false) {
+                        // Clip bubble path. Propagation has been stopped, and
+                        // on() and after() are notification phases of the same
+                        // event, not separate events.
+                        path.splice(i + 1);
+
                         return false;
                     }
                 }
@@ -740,11 +761,7 @@ CustomEvent.prototype = {
             details = this.parseSignature && this.parseSignature(args),
             sub     = new this.Subscription(target, args, phase, details);
 
-        if (payload) {
-            sub.notify.apply(sub, payload);
-        } else {
-            sub.notify();
-        }
+        sub.notify(payload);
 
         // TODO: Should I return the sub if it was created, even though it
         // doesn't get stored?
@@ -763,7 +780,7 @@ CustomEvent.prototype = {
     unsubscribe: function (target, args) {
         var type    = args[0],
             allSubs = target._yuievt.subs,
-            i, len, subs, sub, phase, cleanup;
+            i, subs, sub, phase, cleanup;
 
         // Custom detach() can return truthy value to abort the unsubscribe
         if (this.detach && this.detach.apply(this, args)) {
@@ -774,16 +791,21 @@ CustomEvent.prototype = {
         if (type instanceof Subscription) {
             // Use case: detach(sub);
             if (type.subs) {
-                for (i = 0, len = type.subs.length; i < len; ++i) {
-                    if (type.subs[i] && type.subs[i].detach) {
-                        type.subs[i].detach();
-                    }
-                }
+                // Weak point - assumes knowledge of Subscription internals,
+                // AND that this event doesn't override this.Subscription with
+                // an implementation that uses a `subs` property for another
+                // reason. That would result in an infinite loop.
+                type.detach();
             } else {
                 sub    = type;
                 type   = sub.type;
                 phase  = sub.phase;
                 subs   = allSubs[type] && allSubs[type][phase];
+
+                // remove the callback in case the event is currently firing,
+                // since the subscriber list is copied before notifications
+                // begin.
+                sub.callback = NOOP;
 
                 if (subs) {
                     for (i = subs.length - 1; i >= 0; --i) {
@@ -800,22 +822,22 @@ CustomEvent.prototype = {
             phase    = args[2];
 
             if (phase) {
-                if (callback) {
-                    // Use case: detach(type, callback, phase)
-                    subs = subs[phase];
+                // Use case: detach(type, null or callback, phase)
+                subs = subs[phase];
 
-                    if (subs) {
-                        for (i = subs.length - 1; i >= 0; --i) {
-                            if (subs[i].callback === callback) {
-                                subs.splice(i, 1);
-                                // Don't break - back compat requires removing
-                                // all that match callback
-                            }
+                if (subs) {
+                    for (i = subs.length - 1; i >= 0; --i) {
+                        if (!callback || subs[i].callback === callback) {
+                            // remove the callback in case the event is
+                            // currently firing, since the subscriber list
+                            // is copied before notifications begin.
+                            subs[i].callback = NOOP;
+
+                            subs.splice(i, 1);
+                            // Don't break - back compat requires removing
+                            // all that match callback
                         }
                     }
-                } else {
-                    // Use case: detach(type, null, phase)
-                    subs[phase] = null;
                 }
             } else {
                 // Use case: detach(type, callback) or detach(type)
@@ -901,7 +923,7 @@ CustomEvent.FacadeEvent = new CustomEvent('@facade', {
                         this.resolveBubblePath(target) :
                         [target],
             hasSubs = this.hasSubs(path, type),
-            event, payload, ret;
+            event, payload, args, ret;
 
         // Only proceed if:
         // * there are subscribers, OR
@@ -919,36 +941,47 @@ CustomEvent.FacadeEvent = new CustomEvent('@facade', {
         event = new this.Event(type, target, payload);
 
         if (hasSubs) {
+            // Unfortunate cost, and assumption of behavior of this.Event to
+            // subsume the object in payload[0] onto the facade :(
+            if (payload) {
+                args = payload.slice(isObject(payload[0], true) ? 1 : 0);
+                args.unshift(event);
+            } else {
+                args = [event];
+            }
+
             // on() subscribers
-            ret = this.notify(path, type, event, BEFORE);
+            ret = this.notify(path, type, args, BEFORE);
 
             if (ret === false) {
                 event.halt(true);
             }
 
             // default/stop/prevent behavior
-            if (event._stopped && this.stoppedFn) {
+            if (event.stopped && this.stoppedFn) {
                 (target[this.stoppedFn] || this.stoppedFn).call(target, event);
             }
 
-            if (event._prevented && this.preventedFn) {
+            if (event.prevented && this.preventedFn) {
                 (target[this.preventedFn] || this.preventedFn)
                     .call(target, event);
             }
         }
 
-        if (this.defaultFn && !event._prevented) {
-            (target[this.defaultFn] || this.defaultFn).call(target, event);
-        }
+        if (!event.prevented) {
+            if (this.defaultFn) {
+                (target[this.defaultFn] || this.defaultFn).call(target, event);
+            }
 
-        // after() subscribers. defaultFn can stopImmediatePropagation()
-        // to abort notifying them.
-        if (hasSubs && event._stopped !== 2) {
-            // TODO: Reverse path? I'm going with "no" as a default.
-            ret = this.notify(path, type, event, AFTER);
+            // after() subscribers. defaultFn can stopImmediatePropagation()
+            // to abort notifying them.
+            if (hasSubs && event.stopped !== 2) {
+                // TODO: Reverse path? I'm going with "no" as a default.
+                ret = this.notify(path, type, args, AFTER);
 
-            if (ret === false) {
-                event.halt(true);
+                if (ret === false) {
+                    event.halt(true);
+                }
             }
         }
 
@@ -960,13 +993,13 @@ CustomEvent.FacadeEvent = new CustomEvent('@facade', {
             // `immediate` unless e.stopImmediatePropagation() was called,
             // in which case, the event is dead, so subscribe() and fire() are
             // no-ops.
-            target.publish(type, (event._stopped === 2) ? {
+            target.publish(type, (event.stopped === 2) ? {
                 subscribe: NULL,
                 fire     : NOOP
             } : {
                 subscribe : this.immediate,
                 // cache the event it was initially fired with
-                _firedWith: event
+                _firedWith: args || []
             });
         }
     },
@@ -986,8 +1019,12 @@ CustomEvent.FacadeEvent = new CustomEvent('@facade', {
     @param {String} phase The phase of subscribers on the targets to notify
     @param {Boolean} `false` if a subscriber halted the event
     **/
-    notify: function (path, type, event, phase) {
-        var target, subs, sub, i, len, j, jlen, ret;
+    notify: function (path, type, payload, phase) {
+        var event   = payload[0],
+            stopped = event.stopped,
+            target, subs, sub, i, len, j, jlen, ret;
+
+        event.stopped = 0;
 
         for (i = 0, len = path.length; i < len && ret !== false; ++i) {
             target = path[i];
@@ -998,14 +1035,14 @@ CustomEvent.FacadeEvent = new CustomEvent('@facade', {
                 // Snapshot subscriber list to avoid array changing during
                 // notifications (e.g. once() detaches)
                 subs = subs.slice();
-                event.data.currentTarget = target;
+                event.set('currentTarget', target);
 
                 for (j = 0, jlen = subs.length; j < jlen; ++j) {
                     sub = subs[j];
                     // facilitate e.detach();
                     event.subscription = sub;
 
-                    ret = sub.notify(event);
+                    ret = sub.notify(payload);
 
                     event.subscription = null;
 
@@ -1013,15 +1050,25 @@ CustomEvent.FacadeEvent = new CustomEvent('@facade', {
                         event.halt(true);
                     }
 
-                    if (event._stopped === 2) {
-                        return false;
+                    if (event.stopped === 2) {
+                        break;
                     }
                 }
 
-                if (event._stopped) {
-                    break;
+                if (event.stopped) {
+                    // Clip bubble path. Propagation has been stopped, and
+                    // on() and after() are notification phases of the same
+                    // event, not separate events.
+                    path.splice(i + 1);
+
+                    if (stopped < event.stopped) {
+                        stopped = event.stopped;
+                        break;
+                    }
                 }
             }
+
+            event.stopped = stopped;
         }
     },
 
@@ -1062,18 +1109,19 @@ CustomEvent.FacadeEvent = new CustomEvent('@facade', {
     @return {null}
     **/
     immediate: function (target, args, phase) {
-        var event = this._firedWith,
+        var payload = this._firedWith,
+            event   = payload[0],
             details, sub;
 
-        if (event._stopped < 2 && (phase !== AFTER || !event._prevented)) {
+        if (event.stopped < 2 && (phase !== AFTER || !event.prevented)) {
             details = this.parseSignature && this.parseSignature(args);
             sub     = new this.Subscription(target, args, phase, details);
 
-            event.data.currentTarget = target;
+            event.set('currentTarget', target);
 
-            sub.notify(event);
+            sub.notify(payload);
 
-            event.data.currentTarget = null;
+            event.set('currentTarget', null);
         }
 
         // TODO: Should I return the sub if it was created, even though it
@@ -1945,8 +1993,6 @@ EventTarget.configure(EventTarget);
 Y.CustomEvent = CustomEvent;
 Y.EventFacade = EventFacade;
 Y.EventTarget = EventTarget;
-// Alias for partial back compat
-Y.Subscriber  = Y.CustomEvent.Subscription;
 
 /**
 @for YUI
