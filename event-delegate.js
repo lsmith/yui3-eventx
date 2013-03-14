@@ -138,4 +138,4 @@ CEproto.delegateNotify = function (e) {
 // Add Y.delegate, since the prototype was mixed on, not inherited
 Y.delegate = Y.EventTarget.prototype.delegate;
 
-}, '', { requires: ['eventx'] });
+}, '', { requires: ['eventx-base'] });
