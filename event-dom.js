@@ -613,4 +613,4 @@ for (name in events) {
     }
 }
 
-}, '', { requires: [ 'eventx', 'selector' ] });
+}, '', { requires: [ 'eventx-base', 'selector' ] });
