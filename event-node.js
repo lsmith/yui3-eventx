@@ -29,6 +29,10 @@ EventTarget.configure(Y.NodeList);
 Y.NodeList.events = Y.Object(Y.Event.DOM_EVENTS);
 Y.NodeList.events[DEFAULT] = defaultEvent;
 
+Y.Node.prototype.purge = Y.NodeList.prototype.purge = function (recurse, type) {
+    Y.Event.purgeElement(this, recurse, type);
+};
+
 function getNode(name) {
     // Allow setters to populate e.data[name] with a DOM element.
     // Allowing set(...) to store DOM elements helps delegation performance.
@@ -58,7 +62,6 @@ Y.mix(Y.Event.EventFacade.prototype._getter, {
 
     currentTarget: getNode,
     relatedTarget: getNode
-    // TODO: keyCode, charCode, etc
 }, true);
 
 }, '', { requires: [ 'eventx-dom', 'node-core' ] });
