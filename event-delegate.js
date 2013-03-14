@@ -8,8 +8,10 @@ the CustomEvent.prototype. Event's can override their `delegate` and/or
 @submodule eventx-delegate
 @for EventTarget
 **/
-var toArray = Y.Array,
-    CEproto = Y.CustomEvent.prototype;
+var isObject = Y.Lang.isObject,
+    isArray  = Y.Lang.isArray,
+    toArray  = Y.Array,
+    CEproto  = Y.CustomEvent.prototype;
 
 /**
 Make a delegated event subscription. The default signature for delegation is:
@@ -47,8 +49,12 @@ Y.EventTarget.prototype.delegate = function (type) {
                     subs.push(this.delegate.apply(this, args));
                 }
             } else {
+                // delegate({...}, filter) => delegate(null, {...}, filter)
+                // in preparation for...
+                args.unshift(null);
                 for (event in type) {
                     if (type.hasOwnProperty(event)) {
+                        // ...=> delegate(type, callback, filter)
                         args[0] = event;
                         // Weak point, assumes signature includes callback
                         // as second arg for the event (sorta).
@@ -87,7 +93,7 @@ CEproto.delegate = function (target, args) {
         }),
 
         subs = subs[type] || (subs[type] = {});
-        subs = subs['before'] || (subs['before'] = []);
+        subs = subs.before || (subs.before = []);
         subs.push(sub);
     }
 
@@ -95,10 +101,10 @@ CEproto.delegate = function (target, args) {
 };
 
 CEproto.delegateNotify = function (e) {
-    var sub     = e.subscription,
+    var sub     = e && e.subscription,
         details = sub && sub.details,
         filter  = details && details.filter,
-        container, target, defaultThisObj, event, path, i, len;
+        container, target, defaultThis, path, i, len;
 
     if (filter) {
         container   = details.container;
@@ -121,7 +127,7 @@ CEproto.delegateNotify = function (e) {
             // e.stopPropagation() behaves as though the event were bubbling.
             // Break out of the loop if the subscribed target isn't the last
             // in the bubble path.
-            if (e._stopped || path[i] === container) {
+            if (e.stopped || path[i] === container) {
                 break;
             }
         }
