@@ -16,8 +16,11 @@ Y.augment(Y.Node, Y.EventTarget, true);
 
 // Override the getter for container to cache the Node instance in the data
 // collection.
-Y.Event.FacadeEvent.prototype._getter.container = function () {
-    var container = this.data.container || this.details.container;
+Y.Event.EventFacade.prototype._getter.container = function () {
+    var container = this.data.container ||
+                    (this.subscription &&
+                     this.subscription.details &&
+                     this.subscription.details.container);
 
     if (container && !(container instanceof Y.Node)) {
         container = this.data.container = Y.one(container);
