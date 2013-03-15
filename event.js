@@ -1214,7 +1214,7 @@ CustomEvent.Router.prototype = {
     subscribe: function () {
         var event = this.getEvent.apply(this, arguments);
 
-        return event.subscribe.apply(event, arguments);
+        return event && event.subscribe.apply(event, arguments);
     },
 
     /**
@@ -1557,32 +1557,18 @@ EventTarget.prototype = {
     },
 
     /**
-    Get the event by name. If the named or default event would route the named
-    event to another event, that logic is not performed.
-
-
-
-    To exclude the default event, pass a truthy value to _publishedOnly_.
+    Get the event by name. If the named event is not found, the default event
+    is returned unless a truthy value is passed for _publishedOnly_.
 
     @method getEvent
     @param {String} type The event name
-    @param {Arguments} [args] Arguments to relay to smart event tests
-    @param {String} [method] Method name to relay to smart event tests
+    @param {Boolean} [publishedOnly] return `null` instead of the default event
     @return {CustomEvent}
     **/
-    // TODO: add support for getting only published events, no default/smart
-    getEvent: function (type, args, method) {
-        var events = this._yuievt.events,
-            event  = events[type],
-            smart;
+    getEvent: function (type, publishedOnly) {
+        var events = this._yuievt.events;
 
-        if (!event) {
-            smart = events['@' + method];
-
-            event = smart && smart.getEvent(this, type, args, method);
-        }
-
-        return event || events[DEFAULT];
+        return events[type] || (!publishedOnly && events[DEFAULT]);
     },
 
     /**
