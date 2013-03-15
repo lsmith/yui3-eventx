@@ -33,6 +33,21 @@ Y.Node.prototype.purge = Y.NodeList.prototype.purge = function (recurse, type) {
     Y.Event.purgeElement(this, recurse, type);
 };
 
+Y.Node.prototype.detachAll = Y.NodeList.prototype.detachAll = function () {
+    var types, i;
+    // Not wrapped in the _yuievt test because the subscription may have come
+    // from Y.on()
+    Y.Event.purgeElement(this);
+
+    if (this._yuievt) {
+        types = Y.Object.keys(this._yuievt.subs);
+
+        for (i = types.length - 1; i >= 0; --i) {
+            this.detach(types[i]);
+        }
+    }
+};
+
 function getNode(name) {
     // Allow setters to populate e.data[name] with a DOM element.
     // Allowing set(...) to store DOM elements helps delegation performance.

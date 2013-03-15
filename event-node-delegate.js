@@ -7,13 +7,6 @@ Adds delegate support to Node and NodeList.
 @for Node
 **/
 
-// Node has already been augmented with EventTarget, but we have to re-augment
-// to add the delegate method. If we augment with a whitelist of ['delegate']
-// to add only that method, calling delegate() will trigger the constructor,
-// but then calling any of the other EventTarget methods will trigger it again,
-// which will wipe out any event subscriptions added directly to the Node.
-Y.augment(Y.Node, Y.EventTarget, true);
-
 // Override the getter for container to cache the Node instance in the data
 // collection.
 Y.Event.EventFacade.prototype._getter.container = function () {
