@@ -7,7 +7,7 @@ with the window as the target.
 @module eventx
 @submodule eventx-onload
 **/
-if (!Y.Global.getEvent('window.onload')) {
+if (!Y.Global.getEvent('window.onload', true)) {
     Y.Global.publish('window.onload', {
         allowDups: false,
         fireOnce : true
@@ -23,25 +23,34 @@ if (!Y.Global.getEvent('window.onload')) {
     }
 }
 
-Y.Event.publish('load', {
+// Rather than Y.Event.publish because I'm replacing an existing DOM event, and
+// don't want to modify DOMEvent, which would propagate to all events.
+Y.Event.DOM_EVENTS.load = new Y.CustomEvent('load', {
     subscribe: function (target, args /* phase ignored */) {
-        var el;
+        var isY = (target === Y),
+            el  = Y.Event._resolveTarget(isY ? args[2] : target),
+            win = Y.config.win,
+            callback;
 
-        if (target === Y) {
-            args   = toArray(args, 0, true);
-            target = args.splice(2, 1)[0];
-        }
+        if (el === win) {
+            callback = args[1];
+            args = toArray(args, (isY ? 3 : 2), true);
 
-        el = Y.Event._resolveTarget(target);
+            args.unshift('window.onload', callback);
 
-        if (el === Y.config.win) {
-            args[0] = 'window.onload';
+            // Default window for `this`
+            if (!args[2]) {
+                // Note: timing issue, if the node module is loaded after the
+                // subscription is made, the callback `this` won't be a Node
+                args[2] = Y.Node ? Y.one(win) : win;
+            }
+
             return Y.Global.on.apply(Y.Global, args);
         }
 
         // TODO: add support for forking different elements, such as <img>,
         // <script>, or <link>
-        return this._super.subscribe.call(target, args);
+        return this._super.subscribe(target, args);
     },
 
     unsubscribe: function (target, args) {
