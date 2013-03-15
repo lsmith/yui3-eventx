@@ -311,7 +311,7 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
 
         el = Y.Event._resolveTarget(target);
 
-        if (el && el.nodeType) {
+        if (el && (el.nodeType || el === Y.config.win)) {
             phase = capture ? 'capture' : 'on';
 
             eventKey = args[0] = Y.stamp(el) + ':' + type;
@@ -553,7 +553,7 @@ Y.Event = {
     @protected
     **/
     _resolveTarget: function (target) {
-        if (!target) {
+        if (!target || target === Y.config.win) {
             return Y.config.win;
         } else if (typeof target === 'string') {
             target = Y.Selector.query(target);
