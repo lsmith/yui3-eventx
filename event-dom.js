@@ -301,7 +301,7 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
         var type    = args[0],
             capture = (phase === 'capture'),
             sub     = null,
-            el, eventKey, subs, i, len;
+            el, eventKey, subs, i, len, abort;
 
         if (target === Y) {
             // Convert from arguments object to array
@@ -320,8 +320,20 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
                 domType: type
             });
 
-            this.registerSub(el, sub);
-        } else if (el && el.length) {
+            if (this.on) {
+                abort = this.on(sub, el)
+
+                if (abort && abort.detach) {
+                    sub = abort;
+                    // Assume Subscriptions created in on() were registered,
+                    // so don't reset abort = (some falsey value)
+                }
+            }
+
+            if (!abort) {
+                this.registerSub(el, sub);
+            }
+        } else if (el && typeof el.length === 'number') {
             subs = [];
             for (i = 0, len = el.length; i < len; ++i) {
                 // args[0] is assigned the eventKey. Need to reset it.
