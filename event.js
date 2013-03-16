@@ -780,11 +780,15 @@ CustomEvent.prototype = {
     unsubscribe: function (target, args) {
         var type    = args[0],
             allSubs = target._yuievt.subs,
-            i, subs, sub, phase, cleanup;
+            i, subs, sub, phase, cleanup, abort;
 
         // Custom detach() can return truthy value to abort the unsubscribe
-        if (this.detach && this.detach.apply(this, args)) {
-            return;
+        if (this.detach) {
+            abort = this.detach(target, args);
+
+            if (abort) {
+                return;
+            }
         }
 
         // TODO: switch to duck typing on type.detach?
