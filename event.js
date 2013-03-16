@@ -43,8 +43,8 @@ _args_ is expected to be an array containing:
 Alternately, can be used to encapsulate a set of Subscriptions by passing an
 array of Subscription objects as _type_.
 
-@class CustomEvent.Subscription
-@param {EventTarget|CustomEvent.Subscription[]} target From whence the
+@class Subscription
+@param {EventTarget|Subscription[]} target From whence the
                     subscription was made or an array of subscriptions
 @param {Array} args See above
 @param {String} phase The subscription phase
@@ -52,27 +52,25 @@ array of Subscription objects as _type_.
     method if it has one defined
 **/
 function Subscription(target, args, phase, details) {
-    // Ew, but convenient to have Subscription support wrapping a batch of
-    // subscriptions
-    if (args) {
-        this.target   = target;
-        this.phase    = phase;
-        this.details  = details;
+    // Ew, but convenient to have new Subscription handle both single and multi
+    if (!args) {
+        return new BatchSubscription(target);
+    }
 
-        this.type     = args[0];
-        this.callback = args[1];
-        this.thisObj  = args[2];
+    this.target   = target;
+    this.phase    = phase;
+    this.details  = details;
 
-        if (args.length > 3) {
-            this.payload = slice.call(args, 3);
-        }
-    } else if (isArray(target)) {
-        this.subs = target;
+    this.type     = args[0];
+    this.callback = args[1];
+    this.thisObj  = args[2];
+
+    if (args.length > 3) {
+        this.payload = slice.call(args, 3);
     }
 }
 
 Subscription.prototype = {
-
     /**
     Call the subscribed callback with the provided arguments, followed by
     any bound subscription arguments.
@@ -110,18 +108,36 @@ Subscription.prototype = {
     @method detach
     **/
     detach: function () {
-        var sub, i, len;
+        this.target.detach(this);
+    }
+};
 
-        if (this.subs) {
-            for (i = 0, len = this.subs.length; i < len; ++i) {
-                sub = this.subs[i];
+/**
+Wraps an array of Subscriptions. Returned from new Y.Subscription(arrayOfSubs).
 
-                if (sub && sub.detach) {
-                    sub.detach();
-                }
+@class BatchSubscription
+@constructor
+@param {Subscription[]} {subs} The array of Subscriptions
+**/
+function BatchSubscription(subs) {
+    this.subs = subs;
+}
+BatchSubscription.prototype = {
+    /**
+    Calls `detach()` on each sub in the batch.
+
+    @method detach
+    **/
+    detach: function () {
+        var subs = this.subs,
+            i, len;
+
+        for (i = 0, len = subs.length; i < len; ++i) {
+            sub = this.subs[i];
+
+            if (sub && sub.detach) {
+                sub.detach();
             }
-        } else {
-            this.target.detach(this);
         }
     }
 };
@@ -778,99 +794,117 @@ CustomEvent.prototype = {
     @param {Array} args Arguments passed to `detach(..)`
     **/
     unsubscribe: function (target, args) {
-        var type    = args[0],
+        var sub     = args[0],
             allSubs = target._yuievt.subs,
-            i, subs, sub, phase, cleanup, abort;
+            remove, i, len, subs, type, phase, abort;
 
-        // Custom detach() can return truthy value to abort the unsubscribe
-        if (this.detach) {
-            abort = this.detach(target, args);
+        // Use case: detach(type, ...);
+        if (typeof sub === STRING) {
+            subs  = allSubs[sub];
+            phase = args[2];
 
-            if (abort) {
+            if (!subs || (phase && !subs[phase])) {
                 return;
             }
-        }
 
-        // TODO: switch to duck typing on type.detach?
-        if (type instanceof Subscription) {
-            // Use case: detach(sub);
-            if (type.subs) {
-                // Weak point - assumes knowledge of Subscription internals,
-                // AND that this event doesn't override this.Subscription with
-                // an implementation that uses a `subs` property for another
-                // reason. That would result in an infinite loop.
-                type.detach();
-            } else {
-                sub    = type;
-                type   = sub.type;
-                phase  = sub.phase;
-                subs   = allSubs[type] && allSubs[type][phase];
-
-                // remove the callback in case the event is currently firing,
-                // since the subscriber list is copied before notifications
-                // begin.
-                sub.callback = NOOP;
-
-                if (subs) {
-                    for (i = subs.length - 1; i >= 0; --i) {
-                        if (subs[i] === sub) {
-                            subs.splice(i, 1);
-                            break;
-                        }
-                    }
-                }
-            }
-        } else if (allSubs[type]) {
-            subs     = allSubs[type];
+            remove   = [];
             callback = args[1];
-            phase    = args[2];
 
             if (phase) {
-                // Use case: detach(type, null or callback, phase)
-                subs = subs[phase];
-
-                if (subs) {
-                    for (i = subs.length - 1; i >= 0; --i) {
-                        if (!callback || subs[i].callback === callback) {
-                            // remove the callback in case the event is
-                            // currently firing, since the subscriber list
-                            // is copied before notifications begin.
-                            subs[i].callback = NOOP;
-
-                            subs.splice(i, 1);
-                            // Don't break - back compat requires removing
-                            // all that match callback
-                        }
+                push.apply(remove, subs[phase]);
+            } else {
+                for (phase in subs) {
+                    if (subs.hasOwnProperty(phase)) {
+                        push.apply(remove, subs[phase]);
                     }
                 }
-            } else {
-                // Use case: detach(type, callback) or detach(type)
-                this.unsubscribe(target, [type, callback, BEFORE]);
-                this.unsubscribe(target, [type, callback, AFTER]);
             }
+
+            // Not the most efficient algorithm, but avoids deep nesting. We'll
+            // call it an opportunity for performance improvement (at the
+            // expense of code size).
+            if (args[1]) {
+                callback = args[1];
+                subs     = remove;
+                remove   = [];
+
+                for (i = 0, len = subs.length; i < len; ++i) {
+                    if (subs[i].callback === callback) {
+                        remove.push(subs[i]);
+                    }
+                }
+            }
+
+            // Avoids code bloat from having to test and call this.detach for
+            // each discovered sub.
+            sub = new BatchSubscription(remove);
         }
 
-        // Prune empty subscriber collections
-        if (type && phase) {
-            subs = allSubs[type];
+        if (sub instanceof BatchSubscription) {
+            return type.detach();
+        }
 
-            if (subs && (!subs[phase] || !subs[phase].length)) {
-                // This allows hasSubs to avoid returning false positives
+        // use case target.detach(sub)
+        // Note: this.detach not to be mistaken with sub.detach. this.detach
+        // is the configuration option for the CustomEvent to do something
+        // special during the detach phase of the subscription.
+        if (this.detach) {
+            abort = this.detach(sub);
+        }
+
+        if (!abort) {
+            this.unregisterSub(target, sub);
+        }
+    },
+
+    /**
+    Remove a Subscription from the target's subs collection. If there are no
+    remaining subscriptions in the phase or any phase of the sub's type, the
+    empty objects are pruned from the target's subs collection.
+
+    @method registerSub
+    @param {EventTarget} target The host of the event subscription
+    @param {Subscription} sub The subscription to remove
+    **/
+    unregisterSub: function (target, sub) {
+        var allSubs = target._yuievt.subs,
+            type    = sub.type,
+            phase   = sub.phase,
+            subs    = allSubs[type] && allSubs[type][phase],
+            i;
+
+        // remove the callback in case the event is currently firing,
+        // since the subscriber list is copied before notifications
+        // begin.
+        sub.callback = NOOP;
+
+        if (subs) {
+            // Step 1. remove it from the target's _yuievt.subs collection
+            for (i = subs.length - 1; i >= 0; --i) {
+                if (subs[i] === sub) {
+                    subs.splice(i, 1);
+                    break;
+                }
+            }
+
+            // Step 2. prune empty objects in _yuievt.subs
+            if (!subs.length) {
+                subs = allSubs[type];
                 subs[phase] = null;
 
                 cleanup = true;
                 for (phase in subs) {
                     if (subs.hasOwnProperty(phase) && subs[phase]) {
-                        // Still has subs
+                        // Still has subs in another phase
                         cleanup = false;
                         break;
                     }
                 }
 
                 if (cleanup) {
+                    allSubs[type] = null;
                     // TODO: try to reset _yuievt.subs to {} if this was the
                     // last subscription to any event?
-                    allSubs[type] = null;
                 }
             }
         }
@@ -1739,7 +1773,7 @@ EventTarget.prototype = {
                 }
 
                 // Batch Subscription
-                return new Y.CustomEvent.Subscription(subs);
+                return new BatchSubscription(subs);
             }
         }
 
@@ -1979,6 +2013,9 @@ EventTarget.prototype = {
 };
 
 EventTarget.configure(EventTarget);
+
+Y.Subscription      = Subscription;
+Y.BatchSubscription = BatchSubscription;
 
 Y.CustomEvent = CustomEvent;
 Y.EventFacade = EventFacade;
