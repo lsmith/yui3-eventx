@@ -8,7 +8,7 @@ Backward compatibility shim for Y.Event.define.
 **/
 Y.Event.SyntheticEvent = new Y.CustomEvent({
     subscribe: function (target, args, phase, delegate) {
-        var details, sub, filter, el, node, eventKey, subs, i, len;
+        var details, sub, filter, el, eventKey, subs, i, len;
 
         args = toArray(args, 0, true);
 
@@ -31,7 +31,9 @@ Y.Event.SyntheticEvent = new Y.CustomEvent({
             if (!details) {
                 details = {};
             }
+
             details.domType = type;
+            details.node    = node;
 
             sub = new this.Subscription(Y, args, 'before', details);
 
@@ -39,7 +41,7 @@ Y.Event.SyntheticEvent = new Y.CustomEvent({
                 // notifier and subscription are the same object
                 // filter is passed to allow on() to handle individual and
                 // delegate subscriptions
-                this.on(node, sub, sub, filter);
+                this.on(details.node, sub, sub, filter);
             }
 
             this.registerSub(Y, sub);
@@ -52,14 +54,16 @@ Y.Event.SyntheticEvent = new Y.CustomEvent({
             }
 
             // Return batch subscription
-            sub = new Y.CustomEvent.Subscription(subs);
+            sub = new Y.BatchSubscription(subs);
         }
 
         return sub;
     },
 
-    detach: function (target, args) {
-        // TODO: call into this._oldDetach(node, sub, sub)
+    detach: function (target, sub) {
+        if (this._oldDetach) {
+            this._oldDetach(sub.details.node, sub, sub);
+        }
     },
 
     delegate: function (target, args) {
