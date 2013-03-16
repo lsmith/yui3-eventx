@@ -51,8 +51,7 @@ Y.mix(Y.Event.DOMEvent, {
             });
 
             this.registerSub(el, sub);
-        // TODO: el could be a DOM collection ala getElementsByTagName()
-        } else if (isArray(el)) {
+        } else if (el && typeof el.length === 'number') {
             subs = [];
             for (i = 0, len = el.length; i < len; ++i) {
                 subs.push(this.delegate(el[i], args));
