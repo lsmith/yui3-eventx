@@ -8,6 +8,7 @@ Adds Y.Do for AOP wrapping object methods.
 **/
 var isObject = Y.Lang.isObject,
     toArray  = Y.Array,
+    CustomEvent = Y.CustomEvent.prototype,
     Do, AOP;
 
 // Use a CustomEvent for subscription management mechanism
@@ -115,7 +116,7 @@ AOP = new Y.CustomEvent('@aop', {
                 args = [key, callback, args[3]];
             }
 
-            this._super.unsubscribe.call(this, Do, args);
+            CustomEvent.unsubscribe.call(this, Do, args);
 
             if (!this.hasSubs([Do], key)) {
                 aop     = Do._yuievt.aop;

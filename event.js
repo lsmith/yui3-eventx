@@ -416,15 +416,11 @@ prototype event as _inheritsFrom_.
 function CustomEvent(type, config, inheritsFrom) {
     var instance, key;
     
-    if (inheritsFrom) {
-        instance = proto(inheritsFrom);
-        instance._super = inheritsFrom;
-    } else {
+    if (!inheritsFrom && !(this instanceof CustomEvent)) {
         inheritsFrom = CustomEvent.prototype;
-
-        instance = (this instanceof CustomEvent) ? this : proto(inheritsFrom);
-        instance._super = inheritsFrom;
     }
+
+    instance = inheritsFrom ? proto(inheritsFrom) : this;
 
     // Override instance properties and methods from input config
     if (config) {
@@ -443,28 +439,6 @@ function CustomEvent(type, config, inheritsFrom) {
 }
 
 CustomEvent.prototype = {
-    /**
-    Prototype for this object, before any overrides. Use this to call methods
-    overridden methods from your custom overrides rather than reimplementing
-    the overridden logic.
-
-    ```
-    target.publish('foo', {
-        subscribe: function () {
-            console.log('Subscribing to foo');
-            return this._super.subscribe.apply(this, arguments);
-        }
-    });
-    ```
-
-    This is a public property despite the leading underscore. 'super' is a
-    reserved word, and requiring this['super'] is silly.
-
-    @property _super
-    @type {CustomEvent}
-    @default `Y.CustomEvent.prototype`
-    **/
-
     /**
     The class constructor for subscriptions to this event.  Unless the
     `subscribe` method has been overwritten with code that calls

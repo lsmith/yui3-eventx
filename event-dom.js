@@ -4,6 +4,8 @@ var isArray = Y.Lang.isArray,
     toArray = Y.Array,
     slice   = Array.prototype.slice,
 
+    CustomEvent = Y.CustomEvent.prototype,
+
     EVENT_NAMES =
         ('abort beforeunload blur change click close command contextmenu ' +
          'dblclick DOMMouseScroll drag dragstart dragenter dragover ' +
@@ -372,7 +374,7 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
             el, eventKey, capture, phase, i, len, subs;
 
         if (isSub) {
-            return this._super.unsubscribe.apply(this, arguments);
+            return CustomEvent.unsubscribe.apply(this, arguments);
         }
 
         if (target === Y) {
@@ -388,7 +390,7 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
             phase    = capture ? 'capture' : 'on';
             subs     = Y._yuievt.subs;
 
-            this._super.unsubscribe.call(this, Y,
+            CustomEvent.unsubscribe.call(this, Y,
                 [eventKey, args[1], phase]);
 
             // No more subs, remove the DOM subscription

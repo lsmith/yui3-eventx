@@ -7,6 +7,8 @@ with the window as the target.
 @module eventx
 @submodule eventx-onload
 **/
+var DOMEvent = Y.Event.DOMEvent;
+
 if (!Y.Global.getEvent('window.onload', true)) {
     Y.Global.publish('window.onload', {
         allowDups: false,
@@ -50,7 +52,7 @@ Y.Event.DOM_EVENTS.load = new Y.CustomEvent('load', {
 
         // TODO: add support for forking different elements, such as <img>,
         // <script>, or <link>
-        return this._super.subscribe(target, args);
+        return DOMEvent.subscribe(target, args);
     },
 
     unsubscribe: function (target, args) {
@@ -63,9 +65,9 @@ Y.Event.DOM_EVENTS.load = new Y.CustomEvent('load', {
                 Y.Global.detach('window.onload', args[1], args[2]);
             }
         } else {
-            this._super.subscribe.call(target, args);
+            DOMEvent.subscribe.call(target, args);
         }
     }
-}, Y.Event.DOMEvent);
+}, DOMEvent);
 
 }, '', { requires: ['eventx-dom'] });
