@@ -796,7 +796,7 @@ CustomEvent.prototype = {
     unsubscribe: function (target, args) {
         var sub     = args[0],
             allSubs = target._yuievt.subs,
-            remove, i, len, subs, type, phase, abort;
+            remove, i, len, subs, phase, abort;
 
         // Use case: detach(type, ...);
         if (typeof sub === STRING) {
@@ -841,7 +841,7 @@ CustomEvent.prototype = {
         }
 
         if (sub instanceof BatchSubscription) {
-            return type.detach();
+            return sub.detach();
         }
 
         // use case target.detach(sub)
