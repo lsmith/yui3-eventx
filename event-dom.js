@@ -323,7 +323,7 @@ DOMEvent = new Y.CustomEvent({
             });
 
             if (this.on) {
-                abort = this.on(sub, el)
+                abort = this.on(sub, el);
 
                 if (abort && abort.detach) {
                     sub = abort;
