@@ -1284,20 +1284,13 @@ Y.mix(EventTarget, {
     It is necessary to call this method before any instances of a class are
     created. It is advisable to `configure` a class when the class is defined.
 
-    Supply a _baseEvent_ as a CustomEvent instance or as an object of property
-    and method overrides. Overrides will be applied to either an instance of the
-    superclass's base event if the class is an EventTarget, or to a stock
-    instance of CustomEvent. The _baseEvent_ will be used as the prototype for
-    all published events on the class or its instances. If omitted, an instance
-    derived from the superclass's base event will be used, falling back to a
-    stock CustomEvent.
-
     Supply a _defaultEvent_ as a CustomEvent instance or as an object of
     property and method overrides. Overrides will be applied to either an
     instance of the superclass's default event if the class is an EventTarget,
-    or to an event derived from the _baseEvent_. If omitted, an instance
-    derived from the superclass's default event will be used, falling back to
-    an event derived from the base event.
+    or to a stock instance of CustomEvent. The _defaultEvent_ will be used as
+    the prototype for all published events on the class or its instances. If
+    omitted, an instance derived from the superclass's default event will be
+    used, falling back to a stock CustomEvent.
 
     It is still necessary for EventTarget subclass constructors to call the
     EventTarget constructor. This method only sets up the class level events and
@@ -1307,8 +1300,6 @@ Y.mix(EventTarget, {
     @param {Object|Function} Class The class or object instance to enable
                                 events for
     @param {Object} [events] Class events to publish
-    @param {Object|CustomEvent} [baseEvent] Event to establish base behavior for
-                                    all published class events
     @param {Object|CustomEvent} [defaultEvent] Event to handle unknown events
                                     and establish base behavior for all class
                                     events
@@ -1534,7 +1525,7 @@ EventTarget.prototype = {
     Add a new event to this instance's collection of events.  Use
     this to add an event with specific default behavior, preventedFn
     behavior, or special subscription/detach logic (etc).  If the event
-    doesn't behave in any way different from the base event, you don't have
+    doesn't behave in any way different from the default event, you don't have
     to publish it.  If the event applies to all instances, publish it
     statically for the class instead.
     
