@@ -298,7 +298,7 @@ Y.extend(DOMSubscription, Y.CustomEvent.Subscription, {
     }
 });
 
-DOMEvent = new Y.CustomEvent('@dom-event', {
+DOMEvent = new Y.CustomEvent({
     subscribe: function (target, args, phase) {
         var type    = args[0],
             capture = (phase === 'capture'),

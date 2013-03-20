@@ -12,7 +12,7 @@ var isObject = Y.Lang.isObject,
     Do, AOP;
 
 // Use a CustomEvent for subscription management mechanism
-AOP = new Y.CustomEvent('@aop', {
+AOP = new Y.CustomEvent({
     // Default event replaces host object function with an event firing method
     subscribe: function (target, args, phase) {
         var aop      = Do._yuievt.aop,

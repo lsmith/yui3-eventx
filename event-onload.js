@@ -27,7 +27,7 @@ if (!Y.Global.getEvent('window.onload', true)) {
 
 // Rather than Y.Event.publish because I'm replacing an existing DOM event, and
 // don't want to modify DOMEvent, which would propagate to all events.
-Y.Event.DOM_EVENTS.load = new Y.CustomEvent('load', {
+Y.Event.DOM_EVENTS.load = new Y.CustomEvent({
     subscribe: function (target, args /* phase ignored */) {
         var isY = (target === Y),
             el  = Y.Event._resolveTarget(isY ? args[2] : target),

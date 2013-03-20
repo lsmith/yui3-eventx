@@ -408,12 +408,11 @@ that derives from a different set of event behaviors, pass the desired
 prototype event as _inheritsFrom_.
 
 @class CustomEvent
-@param {String} type The name of the event
 @param {Object} [config] overrides and additional properties for the event
 @param {CustomEvent} [inheritsFrom=CustomEvent.prototype] prototype for this
                         event
 **/
-function CustomEvent(type, config, inheritsFrom) {
+function CustomEvent(config, inheritsFrom) {
     var instance, key;
     
     if (!inheritsFrom && !(this instanceof CustomEvent)) {
@@ -430,9 +429,6 @@ function CustomEvent(type, config, inheritsFrom) {
             }
         }
     }
-
-    // type can't be overridden in config
-    instance.type = type;
 
     // Might return instance of another prototype
     return instance;
@@ -907,7 +903,7 @@ Notifies subscribers with an EventFacade, and supports `defaultFn` and friends.
 @type {CustomEvent}
 @static
 **/
-CustomEvent.FacadeEvent = new CustomEvent('@facade', {
+CustomEvent.FacadeEvent = new CustomEvent({
     emitFacade: true,
 
     /**
