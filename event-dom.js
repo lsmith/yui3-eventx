@@ -292,16 +292,6 @@ Y.extend(DOMSubscription, Y.CustomEvent.Subscription, {
         return this.payload ?
             callback.apply(thisObj, [e].concat(this.payload)) :
             callback.call(thisObj, e);
-    },
-
-    /**
-    Detaches the subscription from the subscribed target. Convenience for
-    `Y.detach(this);`.
-
-    @method detach
-    **/
-    detach: function () {
-        Y.detach(this);
     }
 });
 
