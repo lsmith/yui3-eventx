@@ -364,7 +364,7 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
 
         // First subscription needs a DOM subscription
         if (subs.length === 1) {
-            YUI.Env.add(target, type, Y.Event._handleEvent, capture);
+            this._addDOMSub(target, type, capture);
         }
     },
 
@@ -395,7 +395,7 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
 
             // No more subs, remove the DOM subscription
             if (!subs[eventKey] || !subs[eventKey][phase]) {
-                YUI.Env.remove(el, type, Y.Event._handleEvent, capture);
+                this._removeDOMSub(el, type, capture);
             }
         } else if (el && el.length) {
             for (i = 0, len = el.length; i < len; ++i) {
@@ -445,7 +445,15 @@ DOMEvent = new Y.CustomEvent('@dom-event', {
 
     Event       : DOMEventFacade,
 
-    Subscription: DOMSubscription
+    Subscription: DOMSubscription,
+
+    _addDOMSub: function (el, type, capture) {
+        YUI.Env.add(el, type, Y.Event._handleEvent, capture);
+    },
+
+    _removeDOMSub: function (el, type, capture) {
+        YUI.Env.remove(el, type, Y.Event._handleEvent, capture);
+    }
 }, Y.CustomEvent.FacadeEvent);
 
 for (i = 0, len = EVENT_NAMES.length; i < len; ++i) {
