@@ -1467,8 +1467,7 @@ Y.mix(EventTarget, {
                 // mixed onto the FacadeEvent instance, but it might be 2+
                 // supers away. Unlikely, but possible.
                 if (config && config.emitFacade && !event.emitFacade) {
-                    event =
-                        new CustomEvent(type, event, CustomEvent.FacadeEvent);
+                    event = new CustomEvent(event, CustomEvent.FacadeEvent);
                 }
 
                 if (config) {
@@ -1486,11 +1485,10 @@ Y.mix(EventTarget, {
                 // above lengthy comment about how this is also a hack.
                 if (config && config.emitFacade && !inheritsFrom.emitFacade) {
                     event = Y.mix(
-                        new CustomEvent(type,
-                            inheritsFrom, CustomEvent.FacadeEvent),
+                        new CustomEvent(inheritsFrom, CustomEvent.FacadeEvent),
                         config, true);
                 } else {
-                    event = new CustomEvent(type, config, inheritsFrom);
+                    event = new CustomEvent(config, inheritsFrom);
                 }
             }
 
