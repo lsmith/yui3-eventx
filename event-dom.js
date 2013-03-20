@@ -131,15 +131,22 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
 
     @method get
     @param {String} name Data property name
+    @param {Boolean} noProp Do not fall back to retrieving a property on the
+                            instance if the getter is not set and the property
+                            wasn't found in the `data` collection.
     @return {Any} whatever is stored in the data property
     **/
-    get: function (name) {
+    get: function (name, noProp) {
         if (this._getter[name]) {
-            return this._getter[name].call(this, name);
+            // I don't like the noProp hack. Is there a better way to prevent
+            // infinite loops?
+            return this._getter[name].call(this, name, noProp);
         } else if (name in this.data) {
             return this.data[name];
         } else {
-            return (name in this._event) ? this._event[name] : this[name];
+            return (noProp || name in this._event) ?
+                this._event[name] :
+                this[name];
         }
     },
 
@@ -242,7 +249,7 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
 if (Object.defineProperties) { // definePropertIES to avoid IE8's bustedness
     Y.Array.each(FACADE_PROPS, function (prop) {
         Object.defineProperty(DOMEventFacade.prototype, prop, {
-            get: function () { return this.get(prop); },
+            get: function () { return this.get(prop, true); },
             set: function (val) { this.set(prop, val); }
         });
     });

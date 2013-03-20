@@ -312,13 +312,16 @@ EventFacade.prototype = {
 
     @method get
     @param {String} name Data property name
+    @param {Boolean} noProp If no getter is defined, return only the value from
+                            the `data` collection. Do not fall back to
+                            retrieving property on the instance.
     @return {Any} whatever is stored in the data property
     **/
-    get: function (name) {
+    get: function (name, noProp) {
         if (this._getter[name]) {
             return this._getter[name].call(this, name);
         } else {
-            return (name in this.data) ? this.data[name] : this[name];
+            return (noProp || name in this.data) ? this.data[name] : this[name];
         }
     },
 
@@ -346,11 +349,11 @@ EventFacade.prototype = {
 if (Object.defineProperties) {
     Object.defineProperties(EventFacade.prototype, {
         target: {
-            get: function () { return this.get('target'); },
+            get: function () { return this.get('target', true); },
             set: function (val) { this.set('target', val); }
         },
         currentTarget: {
-            get: function () { return this.get('currentTarget'); },
+            get: function () { return this.get('currentTarget', true); },
             set: function (val) { this.set('currentTarget', val); }
         }
     });
