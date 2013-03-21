@@ -14,7 +14,7 @@ var isObject = Y.Lang.isObject,
 // Use a CustomEvent for subscription management mechanism
 AOP = new Y.CustomEvent({
     // Default event replaces host object function with an event firing method
-    subscribe: function (target, args, phase) {
+    subscribe: function (target, args, details) {
         var aop      = Do._yuievt.aop,
             callback = args[0],
             host     = args[1],
@@ -44,7 +44,7 @@ AOP = new Y.CustomEvent({
         args = toArray(args, 4, true);
         args.unshift(key, callback, thisObj);
 
-        sub = new this.Subscription(Do, args, phase);
+        sub = new this.Subscription(Do, args, details);
 
         this.registerSub(Do, sub);
 
@@ -176,7 +176,7 @@ Do = Y.Do = {
     **/
     before: function () {
         // Reuse the subscription mechanism from custom events
-        return AOP.subscribe(Do, arguments, 'before');
+        return AOP.subscribe(Do, arguments, { phase: 'before' });
     },
 
     /**
@@ -210,7 +210,7 @@ Do = Y.Do = {
     **/
     after: function () {
         // Reuse the subscription mechanism from custom events
-        return AOP.subscribe(Do, arguments, 'after');
+        return AOP.subscribe(Do, arguments, { phase: 'after' });
     },
 
     /**

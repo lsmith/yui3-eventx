@@ -49,19 +49,17 @@ Y.Node.prototype.detachAll = Y.NodeList.prototype.detachAll = function () {
 };
 
 function getNode(name) {
-    // Allow setters to populate e.data[name] with a DOM element.
-    // Allowing set(...) to store DOM elements helps delegation performance.
     var node = this.data[name] || this._event[name];
     
-    if (node && !(node instanceof Y.Node)) {
-        node = this.data[name] = Y.one(node);
-    }
-
-    return node;
+    // Don't cache the Node instance in this.data because that makes for mixed
+    // types, which can cause headaches. The performance is worse by running
+    // Y.one() for every get(), but it can be mitigated by the calling code
+    // capturing the value.
+    return node && Y.one(node);
 }
 
 Y.mix(Y.Event.EventFacade.prototype._getter, {
-    target: function (val) {
+    target: function () {
         var target = this.data.target;
 
         if (target && !(target instanceof Y.Node)) {
@@ -76,7 +74,15 @@ Y.mix(Y.Event.EventFacade.prototype._getter, {
     },
 
     currentTarget: getNode,
-    relatedTarget: getNode
+    relatedTarget: getNode,
+    container: function () {
+        var container = this.data.container ||
+                        (this.subscription &&
+                         this.subscription.details &&
+                         this.subscription.details.container);
+
+        return container && Y.one(container);
+    }
 }, true);
 
 }, '', { requires: [ 'eventx-dom', 'node-core' ] });

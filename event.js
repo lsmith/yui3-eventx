@@ -48,17 +48,16 @@ array of Subscription objects as _type_.
                     subscription was made or an array of subscriptions
 @param {Array} args See above
 @param {String} phase The subscription phase
-@param {Any} details Data returned from the event's `parseSignature(args)`
+@param {Any} details Data returned from the event's `parseSignature()`
     method if it has one defined
 **/
-function Subscription(target, args, phase, details) {
+function Subscription(target, args, details) {
     // Ew, but convenient to have new Subscription handle both single and multi
     if (!args) {
         return new BatchSubscription(target);
     }
 
     this.target   = target;
-    this.phase    = phase;
     this.details  = details;
 
     this.type     = args[0];
@@ -94,7 +93,7 @@ Subscription.prototype = {
         // onceAfter in favor of e.detach(), but that would still leave
         // non-emitting events to have to detach( args or sub ). Still,
         // I think that's fine to require that!
-        if (this.once) {
+        if (this.details.once) {
             this.detach();
         }
 
@@ -122,7 +121,10 @@ Wraps an array of Subscriptions. Returned from new Y.Subscription(arrayOfSubs).
 function BatchSubscription(subs) {
     this.subs = subs;
 }
-BatchSubscription.prototype = {
+Y.extend(BatchSubscription, Subscription, {
+    // batch subscriptions aren't for notification
+    notify: NOOP,
+
     /**
     Calls `detach()` on each sub in the batch.
 
@@ -140,7 +142,7 @@ BatchSubscription.prototype = {
             }
         }
     }
-};
+});
 
 /**
 Event object passed as the first parameter to event subscription callbacks.
@@ -374,16 +376,19 @@ method implementations support the following customizations:
     is `true`.
 * config.allowDups (boolean) - Allow or disallow duplicate subscriptions.
     Default is `true`.
-* config.on(target, subscription) - Execute this code when subscriptions are
-    made to the event. Return truthy value to abort the subscription.
+* config.on(target, subscription, details) - Execute this code when
+    subscriptions are made to the event. Return truthy value to abort the
+    subscription. Return a different Subscription to avoid registering the one
+    passed in.
 * config.detach(target, subscription) - Likewise when subscriptions are removed
-* config.parseSignature(subArgs) - Support custom subscription signatures. Data
-    returned from this function will be added to the subscription object.
+* config.parseSignature(target, subArgs, details) - Support custom subscription
+    signatures. Add additional data to the _details_ object to store in the
+    subscription object's `details` property.
 * config.publish(target) - Execute this code when the event is published.
 * config.Event(type, target, payload) - Class used to create the event objects
     that are passed to subscribers.
-* config.Subscription(target, args, phase, details) - Class used to encapsulate
-    a subscription to the event.
+* config.Subscription(target, args, details) - Class used to encapsulate a
+    subscription to the event.
 
 Additional properties and methods can be added to the event for reference from
 any of the configured methods, or from overrides to the methods defined on the
@@ -445,8 +450,10 @@ CustomEvent.prototype = {
 
     * `target` - the EventTarget that called `on()` or `after()`
     * `args` - the subscription arguments (type, callback, thisObj, args)
-    * `phase` - 'before' or 'after'
-    * `details` - returned data from `parseSignature()` if the event has it
+    * `details` - metadata about the subscription, such as phase, whether it's
+                a `delegate()` or `once()` subscription, as well as any
+                additional properties added by `parseSignature` if the event
+                is configured with such a method.
 
     @property Subscription
     @type {Function}
@@ -461,28 +468,45 @@ CustomEvent.prototype = {
     `parseSignature` method for any adjustments needed.  The methods
     called from here include:
     
-    * `parseSignature(args)` if defined for this event
-    * `new this.Subscription(target, args, phase, extras)` passing the
-       processed argument array and any data from `parseSignature`
+    * `parseSignature(target, args, subDetails)` if defined for this event
+    * `new this.Subscription(target, args, subDetails)` passing the
+       processed argument array and subscription metadata, augmented with any
+       data from `parseSignature`
     * `isSubscribed(target, sub)` if `preventDups` is truthy
     * `on(target, sub)` if `on` is defined for this event
     
-    The default signature of `args` is:
+    The default signature of `args` for direct subscriptions is:
     * type (string)
     * callback (function)
     * thisObj (optional `this` override for callback)
     * ...argN (optional additional bound subscription args to pass to callback)
+
+    The default signature of `args` for delegate subscriptions is:
+    * type (string)
+    * callback (function)
+    * filter (function)
+    * thisObj (optional `this` override for callback)
+    * ...argN (optional additional bound subscription args to pass to callback)
     
+    The _details_ object contains instructions and/or information for how to
+    create or customize the subscription. The default properties looked for are:
+    * phase (string) - which phase to register the subscription in
+    * delegate (boolean) - do _args_ reflect a delegate signature
+    * once (boolean) - should the subscription auto-detach after notification
+
     @method subscribe
     @param {EventTarget} target The instance to own the subscription
     @param {Array} args Arguments listed above
-    @param {String} phase The subscription phase ("before" or "after")
+    @param {Object} details The subscription metadata (e.g. phase, etc)
     @return {Subscription}
     **/
-    subscribe: function (target, args, phase) {
-        var details = this.parseSignature && this.parseSignature(args),
-            sub     = new this.Subscription(target, args, phase, details),
-            abort   = this.preventDups    && this.isSubscribed(target, sub);
+    subscribe: function (target, args, details) {
+        if (this.parseSignature) {
+            this.parseSignature(target, args, details);
+        }
+
+        var sub   = new this.Subscription(target, args, details),
+            abort = this.preventDups && this.isSubscribed(target, sub);
 
         if (!abort) {
             if (this.on) {
@@ -518,7 +542,7 @@ CustomEvent.prototype = {
         subs = subs[sub.type] || (subs[sub.type] = {});
 
         // target._yuievt.subs.foo.before
-        subs = subs[sub.phase] || (subs[sub.phase] = []);
+        subs = subs[sub.details.phase] || (subs[sub.details.phase] = []);
 
         // target._yuievt.subs.foo.before.push(sub)
         subs.push(sub);
@@ -536,17 +560,19 @@ CustomEvent.prototype = {
         if (target._yuievt) {
             var type     = sub.type,
                 subs     = target._yuievt.subs[type],
-                phase    = sub.phase,
-                callback = sub.callback,
+                details  = sub.details,
+                phase    = details.phase,
+                delegate = details.delegate,
+                callback = (delegate ? details : sub).callback,
                 cmp, i;
 
             if (subs && subs[phase]) {
                 subs = subs[phase];
                 for (i = subs.length - 1; i >= 0; --i) {
                     cmp = subs[i];
-                    if (cmp.type     === type
-                    &&  cmp.phase    === phase
-                    &&  cmp.callback === callback) {
+                    if (type     === cmp.type
+                    &&  phase    === cmp.details.phase
+                    &&  callback === (delegate ? cmp.details : cmp).callback) {
                         return true;
                     }
                 }
@@ -742,15 +768,18 @@ CustomEvent.prototype = {
     @param {EventTarget} target The instance from which on/after was called
     @param {Array} args Subscription arguments for the event (type, callback,
                         context, and extra args)
-    @param {String} phase The phase of the subscription
+    @param {Object} details The subscription metadata (e.g. phase, etc)
     @return {null}
     **/
-    immediate: function (target, args, phase) {
-        var payload = this._firedWith,
-            details = this.parseSignature && this.parseSignature(args),
-            sub     = new this.Subscription(target, args, phase, details);
+    immediate: function (target, args, details) {
+        var payload = this._firedWith;
 
-        sub.notify(payload);
+        if (this.parseSignature) {
+            this.parseSignature(target, args, details);
+        }
+
+        new this.Subscription(target, args, details)
+            .notify(payload);
 
         // TODO: Should I return the sub if it was created, even though it
         // doesn't get stored?
@@ -842,7 +871,7 @@ CustomEvent.prototype = {
     unregisterSub: function (target, sub) {
         var allSubs = target._yuievt.subs,
             type    = sub.type,
-            phase   = sub.phase,
+            phase   = sub.details.phase,
             subs    = allSubs[type] && allSubs[type][phase],
             i;
 
@@ -908,6 +937,62 @@ Notifies subscribers with an EventFacade, and supports `defaultFn` and friends.
 **/
 CustomEvent.FacadeEvent = new CustomEvent({
     emitFacade: true,
+
+    subscribe: function (target, args, details) {
+        if (this.parseSignature) {
+            this.parseSignature(target, args, details);
+        }
+
+        if (details.delegate) {
+            this.delegate(target, args, details);
+        }
+
+        var sub   = new this.Subscription(target, args, details),
+            abort = this.preventDups && this.isSubscribed(target, sub);
+
+        if (!abort) {
+            // Custom behavior hook
+            if (this.on) {
+                abort = this.on(target, sub);
+            }
+
+            // Register the subscription
+            if (!abort) {
+                this.registerSub(target, sub);
+            } else if (abort.detach) {
+                // Allow on() to return an alternate Subscription.
+                // It is assumed that this subscription was registered on the
+                // appropriate target.
+                sub   = abort;
+                abort = false;
+            }
+        }
+
+        return abort ? null : sub;
+    },
+
+    /**
+    Sets up the _args_ array to relay notifications through a delegation filter
+    and decorates the details with supporting data.
+
+    @method delegate
+    @param {EventTarget} target The subscribing EventTarget
+    @param {Subscription} sub The direct subscription
+    @param {Object} details The subscription metadata (e.g. phase, etc)
+    **/
+    delegate: function (target, args, details) {
+        var callback = args[1],
+            // remove the delegate filter from the args array
+            filter   = args.splice(2, 1)[0];
+
+        // replace the subscription callback with the delegate filter.
+        // store the original callback in the details
+        args[1] = this.delegateNotify;
+
+        details.callback = callback;
+        details.filter   = filter;
+        details.target   = target;
+    },
 
     /**
     Executes subscribers for the "before" (aka "on") phase for all targets
@@ -1083,6 +1168,40 @@ CustomEvent.FacadeEvent = new CustomEvent({
         }
     },
 
+    delegateNotify: function (e) {
+        var sub     = e && e.subscription,
+            details = sub && sub.details,
+            filter  = details && details.filter,
+            container, target, defaultThis, path, i, len;
+
+        if (filter) {
+            container   = details.container;
+            defaultThis = (container === this);
+            target      = e.get('target');
+            path        = target.getEvent(e.type).resolveBubblePath(target);
+
+            e.set('container', container);
+
+            for (i = 0, len = path.length; i < len; ++i) {
+                e.set('currentTarget', path[i]);
+
+                if (filter.call(sub, e)) {
+                    // arguments contains e, which has had its currentTarget
+                    // updated.
+                    details.callback
+                        .apply((defaultThis ? path[i] : this), arguments);
+                }
+
+                // e.stopPropagation() behaves as though the event were
+                // bubbling. Break out of the loop if the subscribed target
+                // isn't the last in the bubble path.
+                if (e.stopped || path[i] === container) {
+                    break;
+                }
+            }
+        }
+    },
+
     /**
     The event facade class to use when firing an event. `fire()` generates a
     single event object that is passed to each subscriber in turn.
@@ -1116,21 +1235,23 @@ CustomEvent.FacadeEvent = new CustomEvent({
     @param {EventTarget} target The instance from which on/after was called
     @param {Array} args Subscription arguments for the event (type, callback,
                         context, and extra args)
-    @param {String} phase The phase of the subscription
+    @param {Object} details The subscription metadata (e.g. phase, etc)
     @return {null}
     **/
-    immediate: function (target, args, phase) {
+    immediate: function (target, args, details) {
         var payload = this._firedWith,
-            event   = payload[0],
-            details, sub;
+            event   = payload[0];
 
-        if (event.stopped < 2 && (phase !== AFTER || !event.prevented)) {
-            details = this.parseSignature && this.parseSignature(args);
-            sub     = new this.Subscription(target, args, phase, details);
+        if (event.stopped < 2
+        && (details.phase !== AFTER || !event.prevented)) {
+            if (this.parseSignature) {
+                this.parseSignature(target, args, details);
+            }
 
             event.set('currentTarget', target);
 
-            sub.notify(payload);
+            new this.Subscription(target, args, details)
+                .notify(payload);
 
             event.set('currentTarget', null);
         }
@@ -1219,7 +1340,7 @@ CustomEvent.Router.prototype = {
     @param {EventTarget} target The instance to own the subscription
     @param {Array} args Arguments passed to the target's `on()`, `after()`, or
                             `subscribe` method
-    @param {String} phase The subscription phase ("before" or "after")
+    @param {Object} details The subscription metadata (e.g. phase, etc)
     @return {Subscription}
     **/
     subscribe: function () {
@@ -1371,10 +1492,9 @@ Y.mix(EventTarget, {
     a standalone event, include the _smart_ parameter. Pass an array of the
     lifecycle phases that you want the event listening for. Available phases:
 
-    * "subscribe"
+    * "subscribe" (handles both direct and delegate subscriptions)
     * "unsubscribe"
     * "fire"
-    * "delegate" (if eventx-delegate is also loaded)
 
     Smart events must have a method `test(target, argsArray, method)` that
     should return true if control should be routed to that event's appropriate
@@ -1386,31 +1506,25 @@ Y.mix(EventTarget, {
     ```
     // Handle subscriptions like menu.on('itemClick#upload', callback)
     Y.Menu.publish('@itemClick', {
-        test: function (target, args, method) {
-            return (method === 'subscribe' && !args[0].indexOf('itemClick#'));
+        test: function (target, args) {
+            return args[0].indexOf('itemClick#') === 0;
         },
 
-        subscribe: function (target, args, phase) {
+        parseSignature: function (target, args, details) {
             var itemId   = args[0].slice(args[0].indexOf('#') + 1),
                 callback = args[1],
                 sub;
 
+            // transform this into a delegate subscription
+            details.delegate = true;
+            details.itemId   = itemId;
+
             args[0] = 'itemClick';
-            args[1] = this.filter;
-
-            sub     = target.subscribe.apply(target, args);
-            sub.details.itemId   = itemId;
-            sub.details.callback = callback;
-
-            return sub;
+            args.splice(2, 0, this.filter);
         },
 
         filter: function (e) {
-            var sub = e.subscription;
-
-            if (e.get('currentTarget').id === sub.details.itemId) {
-                return sub.details.callback.apply(this, arguments);
-            }
+            return (e.currentTarget.id === e.subscription.details.itemId);
         }
     }, null, ['subscribe']);
     ```
@@ -1601,25 +1715,8 @@ EventTarget.prototype = {
     @param {Any*} sigArgs see above note on default signature
     @return {Subscription}
     **/
-    on: function (type) {
-        var events = this._yuievt.events,
-            event  = events[type],
-            args;
-
-        if (!event) {
-            if (typeof type === STRING) {
-                event = events[SUBSCRIBE] || events[DEFAULT];
-            } else {
-                // Defer object/array syntax handling and smart event
-                // resolution to subscribe()
-                args = toArray(arguments, 0, true);
-                args.splice(1, 0, BEFORE);
-
-                return this.subscribe.apply(this, args);
-            }
-        }
-
-        return event.subscribe(this, arguments, BEFORE);
+    on: function (/*type, callback, thisObj, ...args*/) {
+        return this._subscribe(arguments, { phase: BEFORE });
     },
 
     /**
@@ -1653,25 +1750,8 @@ EventTarget.prototype = {
     @param {Any*} sigArgs see above note on default signature
     @return {Subscription}
     **/
-    after: function (type) {
-        var events = this._yuievt.events,
-            event  = events[type],
-            args;
-
-        if (!event) {
-            if (typeof type === STRING) {
-                event = events[SUBSCRIBE] || events[DEFAULT];
-            } else {
-                // Defer object/array syntax handling and smart event
-                // resolution to subscribe()
-                args = toArray(arguments, 0, true);
-                args.splice(1, 0, AFTER);
-
-                return this.subscribe.apply(this, args);
-            }
-        }
-
-        return event.subscribe(this, arguments, AFTER);
+    after: function (/*type, callback, thisObj, ...args*/) {
+        return this._subscribe(arguments, { phase: AFTER });
     },
 
     /**
@@ -1687,7 +1767,7 @@ EventTarget.prototype = {
     by default the subscription signature will look like this:
 
     ```
-    target.subscribe(type, phase, callback, thisObj, extraArg, ...exrtraArgN);
+    target.subscribe(type, phase, callback, thisObj, ...argN);
     ```
 
     _thisObj_ is optional, and sets the _callback_'s `this` object. The default
@@ -1699,50 +1779,45 @@ EventTarget.prototype = {
     exactly, smart events will be tested if any have been published for this
     class or instance. If either no smart events have been published or none
     match the subscription signature, the default event behavior will be used.
+
+    _phase_ may be a string (e.g. "before" or "after") or a configuration
+    object containing any of the following properties:
+    * "phase" - (required) Typically "before" or "after", but may be custom
+    * "once" - Truthy if the subscription should be detached after notification
+    * "delegate" - Truthy if the args correspond to a delegate signature
+
+    Use an object config to create special subscriptions, such as one-time
+    delegated subscriptions in non-"before" phases:
+
+    ```
+    var subConfig = {
+        phase: 'in-between',
+        delegate: true,
+        once: true
+    };
+
+    target.subscribe('crazy', subConfig, callback, delegateFilter, thisObj);
+    ```
+    Since CustomEvents may have overridden `subscribe` methods, additional
+    config properties may be passed to trigger custom behavior or provide info
+    for custom behavior.
     
     @method subscribe
-    @param {String} type {String} event type to subcribe to
-    @param {String} phase {String} event phase to attach subscription
+    @param {String} type Event type to subcribe to
+    @param {String|Object} phase Event phase to attach subscription, or
+                            configuration object for the subscription.
     @param {Any*} sigArgs see above note on default signature
     @return {Subscription}
     **/
-    subscribe: function (type, phase) {
-        var events = this._yuievt.events,
-            event  = events[type],
-            args   = toArray(arguments, 0, true),
-            i, len, subs;
+    subscribe: function (type, phase/*, callback, thisObj, ...args*/) {
+        // Need to splice out the phase from the arguments for the
+        // event.subscribe signature
+        var args = toArray(arguments, 2, true);
 
-        if (!event) {
-            if (typeof type === STRING) {
-                event = events[SUBSCRIBE] || events[DEFAULT];
-            } else if (isObject(type)) {
-                subs = [];
-                if (isArray(type)) {
-                    for (i = 0, len = type.length; i < len; ++i) {
-                        args[0] = type[i];
-                        subs.push(this.subscribe.apply(this, args));
-                    }
-                } else {
-                    for (event in type) {
-                        if (type.hasOwnProperty(event)) {
-                            args[0] = event;
-                            // Weak point, assumes signature includes callback
-                            // as third arg for the event (sorta).
-                            args[2] = type[event];
-                            subs.push(this.subscribe.apply(this, args));
-                        }
-                    }
-                }
+        args.unshift(type);
 
-                // Batch Subscription
-                return new BatchSubscription(subs);
-            }
-        }
-
-        // Remove phase from args array. It's passed separately
-        args.splice(1, 1);
-
-        return event.subscribe(this, args, phase);
+        return this._subscribe(args,
+            isObject(phase) ? Y.merge(phase) : { phase: phase });
     },
 
     /**
@@ -1761,23 +1836,8 @@ EventTarget.prototype = {
     @param {Any*} sigArgs see note in `on()` for default signature
     @return {Subscription}
     **/
-    once: function () {
-        var sub = this.on.apply(this, arguments),
-            i;
-
-        if (sub) {
-            if (sub.subs) {
-                for (i = sub.subs.length - 1; i >= 0; --i) {
-                    if (sub.subs[i]) {
-                        sub.subs[i].once = true;
-                    }
-                }
-            } else {
-                sub.once = true;
-            }
-        }
-
-        return sub;
+    once: function (/*type, callback, thisObj, ...args*/) {
+        return this._subscribe(arguments, { phase: BEFORE, once: true });
     },
 
     /**
@@ -1797,22 +1857,104 @@ EventTarget.prototype = {
     @param {Any*} sigArgs see note in `after()` for default signature
     @return {Subscription}
     **/
-    onceAfter: function () {
-        var sub = this.after.apply(this, arguments);
+    onceAfter: function (/*type, callback, thisObj, ...args*/) {
+        return this._subscribe(arguments, { phase: AFTER, once: true });
+    },
 
-        if (sub) {
-            if (sub.subs) {
-                for (i = sub.subs.length - 1; i >= 0; --i) {
-                    if (sub.subs[i]) {
-                        sub.subs[i].once = true;
+    /**
+    Make a delegated event subscription. The default signature for delegation
+    is:
+
+    ```
+    target.delegate(type, callback, filterFn, thisOverride, ...args);
+    ```
+
+    However, published events can override this signature to look for the
+    filter in a different argument position or accept filters in different
+    forms (such as selector strings for DOM subscriptions).
+
+    _type_ can be a single event name string, an array of event name strings,
+    or an object map of event names to callbacks.
+
+    @method delegate
+    @param {String|String[]|Object} type
+    @param {Any} args* See above for default signature
+    @return {Subscription}
+    **/
+    delegate: function (/*type, callback, filterFn, thisObj, ...args*/) {
+        return this._subscribe(arguments, { phase: BEFORE, delegate: true });
+    },
+
+    /**
+    Does the work for `on`, `after`, `once`, `onceAfter`, `subscribe`, and
+    `delegate`, but can also be used for special case subscriptions such as
+    wanting to delegate in a custom phase.
+
+    The _args_ array will be passed to the appropriate event, determined by the
+    value of the first item in the _args_ array. If the event isn't found
+    explicitly in the target's `_yuievt.events` collection, the `@subscribe`
+    smart event router will be queried for a match if the router is present. If
+    all else fails, the default event will be used.
+
+    The _details_ object may include the following properties:
+    * "phase" - (required) Typically "before" or "after", but may be custom
+    * "once" - Truthy if the subscription should be detached after notification
+    * "delegate" - Truthy if the args correspond to a delegate signature
+    
+    Since CustomEvents may have overridden `subscribe` methods, additional
+    detail properties may be passed, if manually calling this method, to trigger
+    custom behavior or provide info for custom behavior.
+
+    @method _subscribe
+    @param {Any[]} args See above note on default signature
+    @param {Object} details Subscription metadata (e.g. phase, etc)
+    @return {Subscription}
+    **/
+    _subscribe: function (args, details) {
+        var type   = args && args[0],
+            events = this._yuievt.events,
+            event  = events[type],
+            i, len, subs;
+
+        // Event isn't published explicitly. May be object subscription syntax
+        // or an event that is unspacial and handled by the default event or
+        // an event that will be handled by a registered smart event
+        if (!event) {
+            if (typeof type === STRING) {
+                // Use the @subscribe smart event router or the default event
+                event = events[SUBSCRIBE] || events[DEFAULT];
+            } else if (isObject(type)) {
+                // Handle batch subscriptions
+                subs = [];
+                if (isArray(type)) {
+                    for (i = 0, len = type.length; i < len; ++i) {
+                        args[0] = type[i];
+                        subs.push(this._subscribe(args, Y.merge(details)));
+                    }
+                } else {
+                    // Shifting args by one because object syntax assumes
+                    // callback arg at index 1 is absent, subsumed  into the
+                    // object in index 0. That is, on({ foo: fn }, thisObj),
+                    // not on({ foo: fn }, null?, thisObj)...
+                    args = toArray(args, 0, true);
+                    args.unshift(null);
+                    for (event in type) {
+                        if (type.hasOwnProperty(event)) {
+                            // And in the loop, arg indexes 0 and 1 are set per
+                            // the key and value of the object.
+                            args[0] = event;
+                            args[1] = type[event];
+                            subs.push(this._subscribe(args, Y.merge(details)));
+                        }
                     }
                 }
-            } else {
-                sub.once = true;
+
+                // Batch Subscription
+                return new BatchSubscription(subs);
             }
         }
 
-        return sub;
+        return event.subscribe(this, args, details);
     },
 
     /**

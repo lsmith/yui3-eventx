@@ -28,9 +28,9 @@ if (!Y.Global.getEvent('window.onload', true)) {
 // Rather than Y.Event.publish because I'm replacing an existing DOM event, and
 // don't want to modify DOMEvent, which would propagate to all events.
 Y.Event.DOM_EVENTS.load = new Y.CustomEvent({
-    subscribe: function (target, args /* phase ignored */) {
+    subscribe: function (target, args, details) {
         var isY = (target === Y),
-            el  = Y.Event._resolveTarget(isY ? args[2] : target),
+            el  = this.resolveTarget(isY ? args[2] : target),
             win = Y.config.win,
             callback;
 
@@ -52,11 +52,11 @@ Y.Event.DOM_EVENTS.load = new Y.CustomEvent({
 
         // TODO: add support for forking different elements, such as <img>,
         // <script>, or <link>
-        return DOMEvent.subscribe(target, args);
+        return DOMEvent.subscribe(target, args, details);
     },
 
     unsubscribe: function (target, args) {
-        var el = Y.Event._resolveTarget(target === Y ? args[2] : target);
+        var el = this.resolveTarget(target === Y ? args[2] : target);
 
         if (el === Y.config.win) {
             if (args[0].detach) {
@@ -65,7 +65,7 @@ Y.Event.DOM_EVENTS.load = new Y.CustomEvent({
                 Y.Global.detach('window.onload', args[1], args[2]);
             }
         } else {
-            DOMEvent.subscribe.call(target, args);
+            DOMEvent.unsubscribe(target, args);
         }
     }
 }, DOMEvent);

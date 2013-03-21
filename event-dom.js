@@ -38,6 +38,181 @@ var isArray = Y.Lang.isArray,
     events, name, i, len;
 
 
+Y.Event = {
+    /**
+    DOM and synthetic event collection for sharing between Y, Node, and
+    NodeList.
+
+    @property DOM_EVENTS
+    @type {Object}
+    **/
+    // populated below
+    DOM_EVENTS: DOM_EVENTS,
+
+    /**
+    The custom event definition (prototype) used to handle DOM events.
+    Modifying this will alter the behavior of all DOM events.
+
+    @property DOMEvent
+    @type {CustomEvent}
+    **/
+    // defined below
+    //DOMEvent: DOMEvent,
+
+    /**
+    The event facade class used by DOMEvent (aka DOMEventFacade).
+
+    @property EventFacade
+    @type {Event.EventFacade}
+    **/
+    // defined below
+    //EventFacade: DOMEventFacade,
+
+    /**
+    The subscription class used by DOMEvent (aka DOMSubscription).
+
+    @property EventFacade
+    @type {Event.EventFacade}
+    **/
+    // defined below
+    //Subscription: DOMSubscription,
+
+    /**
+    Whitelist an existing DOM event, customize the behavior of a whitelisted
+    event, or publish a synthetic DOM event that will masquerade as a DOM event
+    throughout the system.
+
+    @method publish
+    @param {String} type Name of the event
+    @param {Object|CustomEvent} [config] Event overrides or CustomEvent instance
+    @param {CustomEvent} [inheritsFrom] Event to use as the prototype before
+                            customizations in _config_ are applied
+    **/
+    publish: function (type, config, inheritsFrom, smart) {
+        // Default DOMEvent for Y.Event.publish('beforeunload') use case to
+        // make it easy to whitelist existing DOM events. Don't default
+        // DOMEvent for others because synthetic events have custom behavior
+        // and should relate to DOMEvent behavior only on an as-needed basis,
+        // and likely via the EventTarget API on Node/Y.
+        if (arguments.length === 1) {
+            Y.Event.DOM_EVENTS[type] = Y.Event.DOMEvent;
+        } else {
+            Y.EventTarget._publish(Y.Event, Y.Event.DOM_EVENTS,
+                type, config, inheritsFrom, smart);
+        }
+    },
+
+    /**
+    Remove all DOM event subscriptions from _target_, optionally also purging
+    subscriptions of _target_'s subtree. Specify a _type_ to limit detaching to
+    a specific event.
+
+    _target_ can be a selector string, Node, NodeList, HTMLElement, or array
+    of HTMLElements.
+
+    @method purgeElement
+    @param {String|Node|NodeList|Element|Element[]} target What to purge
+    @param {Boolean} [recurse] If truthy, also purge all descendants
+    @param {String} [type] Limit purge to this event
+    **/
+    purgeElement: function (target, recurse, type) {
+        var yuid, i, len, subs, eventKey;
+
+        target = Y.Event._resolveTarget(target);
+
+        if (target) {
+            if (target.nodeType) {
+                yuid = Y.stamp(target);
+
+                if (recurse) {
+                    // purge children, but don't return because we still need
+                    // to purge the target
+                    Y.Event.purgeElement(
+                        target.getElementsByTagName('*'), false, type);
+                }
+
+                if (type) {
+                    Y.detach(type, null, target);
+                } else {
+                    subs = Y._yuievt.subs;
+
+                    for (eventKey in subs) {
+                        if (eventKey.indexOf(yuid) === 0) {
+                            Y.detach(
+                                eventKey.slice(eventKey.lastIndexOf(':') + 1),
+                                null, target);
+                        }
+                    }
+                }
+            } else if (target.length) {
+                for (i = 0, len = target.length; i < len; ++i) {
+                    Y.Event.purgeElement(target[i], recurse, type);
+                }
+            }
+        }
+    },
+
+    /**
+    Resolves the input value to a DOM Element or array of DOM Elements.
+
+    If unsuccessful, `null` is returned.
+
+    If no target is passed, `Y.config.win` is returned.
+
+    @method _resolveTarget
+    @param {String|Node|NodeList|Element|Element[]} target
+    @return {Element|Element[]}
+    @protected
+    **/
+    _resolveTarget: function (target) {
+        if (!target || target === Y.config.win) {
+            return Y.config.win;
+        } else if (typeof target === 'string') {
+            target = Y.Selector.query(target);
+
+            if (target.length === 1) {
+                return target[0];
+            } else if (target.length > 1) {
+                return target;
+            }
+        } else if (target.nodeType || (target[0] && target[0].nodeType)) {
+            return target;
+        } else if (Y.Node) {
+            if (target instanceof Y.Node) {
+                return target._node;
+            } else if (target instanceof Y.NodeList) {
+                return target._nodes;
+            } else if (target[0] && target[0] instanceof Y.Node) {
+                return Y.all(target)._nodes;
+            }
+        }
+
+        if (isArray(target) && !target.length) {
+            return target;
+        }
+
+        return null;
+    },
+
+    /**
+    Routes a DOM event to the Notifier responsible for calling the DOM event
+    subscribers.
+
+    @method _handleEvent
+    @param {DOMEvent} e the native DOM event
+    **/
+    _handleEvent: function (e) {
+        // Inlined for old IE support rather than breaking out into submodule.
+        // The quantity of code just isn't worth it.
+        if (!e) {
+            e = event;
+        }
+
+        // fire('click', rawDOMEvent, clickedDOMElement)
+        Y.fire(e.type, e, this);
+    }
+};
+
 function DOMEventFacade(type, target, payload) {
     var key;
 
@@ -83,7 +258,7 @@ function getWhich() {
            this.get('keyCode'); // fall back to the getter for keyCode
 }
 
-Y.extend(DOMEventFacade, Y.EventFacade, {
+Y.Event.EventFacade = Y.extend(DOMEventFacade, Y.EventFacade, {
     // Don't share the getters object from Y.EventFacade or event-node will
     // add _getter.target for all events, custom and DOM.
     // TODO: should this be Y.Object(EF.proto._getter)?
@@ -118,6 +293,12 @@ Y.extend(DOMEventFacade, Y.EventFacade, {
             }
 
             return this.data.wheelDelta;
+        },
+        container: function () {
+            return this.data.container ||
+                   (this.subscription &&
+                    this.subscription.details &&
+                    this.subscription.details.container);
         }
     },
 
@@ -255,10 +436,9 @@ if (Object.defineProperties) { // definePropertIES to avoid IE8's bustedness
     });
 }
 
-function DOMSubscription(target, args, phase, details) {
+function DOMSubscription(target, args, details) {
     // Does not support batch construction
     this.target   = target;
-    this.phase    = phase;
     this.details  = details;
 
     this.type     = args[0];
@@ -271,7 +451,7 @@ function DOMSubscription(target, args, phase, details) {
 }
 
 // extends for instanceof support, but overrides both methods (yay, instanceof!)
-Y.extend(DOMSubscription, Y.CustomEvent.Subscription, {
+Y.Event.Subscription = Y.extend(DOMSubscription, Y.Subscription, {
     /**
     Call the subscribed callback with the provided event object, followed by
     any bound subscription arguments.
@@ -295,62 +475,140 @@ Y.extend(DOMSubscription, Y.CustomEvent.Subscription, {
     }
 });
 
-DOMEvent = new Y.CustomEvent({
-    subscribe: function (target, args, phase) {
+Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
+    subscribe: function (target, args, details) {
+        args = toArray(args, 0, true);
+
+        // details._sigParsed is to avoid duplicate parsing if target resolves
+        // to multiple elements, and subscribe is recalled in a loop.
+        if (this.parseSignature && !details._sigParsed) {
+            this.parseSignature(target, args, details);
+            details._sigParsed = true;
+        }
+
         var type    = args[0],
-            capture = (phase === 'capture'),
-            sub     = null,
-            el, eventKey, subs, i, len, abort;
+            capture = (details.phase === 'capture'),
+            sub, el, eventKey, subs, i, len, abort;
 
         if (target === Y) {
-            // Convert from arguments object to array
-            args = toArray(args, 0, true);
+            // Y.on(type, fn, target, thisObj) => target.on(type, fn, thisObj)
             target = args.splice(2,1)[0];
         }
 
-        el = Y.Event._resolveTarget(target);
+        el = this.resolveTarget(target);
 
         if (el && (el.nodeType || el === Y.config.win)) {
             phase = capture ? 'capture' : 'on';
 
+            details.domType = type;
+
+            if (details.delegate) {
+                this.delegate(el, args, details);
+            }
+
             eventKey = args[0] = Y.stamp(el) + ':' + type;
 
-            sub = new this.Subscription(Y, args, phase, {
-                domType: type
-            });
+            sub = new this.Subscription(Y, args, details);
 
             if (this.on) {
-                abort = this.on(sub, el);
-
-                if (abort && abort.detach) {
-                    sub = abort;
-                    // Assume Subscriptions created in on() were registered,
-                    // so don't reset abort = (some falsey value)
-                }
+                abort = this.on(el, sub);
             }
 
             if (!abort) {
                 this.registerSub(el, sub);
+            } else if (abort.detach) {
+                sub   = abort;
+                abort = null;
             }
         } else if (el && typeof el.length === 'number') {
             subs = [];
             for (i = 0, len = el.length; i < len; ++i) {
                 // args[0] is assigned the eventKey. Need to reset it.
                 args[0] = type;
-                subs.push(this.subscribe(el[i], args, phase));
+                subs.push(this.subscribe(el[i], args, Y.merge(details)));
             }
 
             // Return batch subscription
-            sub = new Y.CustomEvent.Subscription(subs);
+            sub = new Y.BatchSubscription(subs);
         }
 
-        return sub;
+        return abort ? null : sub;
+    },
+
+    // Aliased on the event object to allow Widget to override for support of
+    // DOM events, having the target resolve to the Widget's boundingBox
+    resolveTarget: Y.Event._resolveTarget,
+
+    delegate: function (target, args, details) {
+        var callback = args[1],
+            // remove the delegate filter from the args array
+            filter   = args.splice(2, 1)[0];
+
+        // replace the subscription callback with the delegate filter.
+        // store the original callback in the sub config
+        args[1] = this.delegateNotify;
+
+        details.callback  = callback;
+        details.target    = target;
+        details.container = target;
+        details.setThis   = !(args[2]);
+
+        if (typeof filter === 'string') {
+            details.selector = filter;
+            details.filter   = this.selectorFilter;
+        } else {
+            details.filter = filter;
+        }
+    },
+
+    delegateNotify: function (e) {
+        var sub     = e.subscription,
+            details = sub && sub.details,
+            filter  = details && details.filter,
+            container, target, currentTarget, setThis;
+
+        if (filter) {
+            container = details.container;
+            target    = e._event.target || e._event.srcElement;
+            setThis   = details.setThis;
+
+            e.set('container', container);
+
+            while (target.nodeType === 3) {
+                target = target.parentNode;
+            }
+
+            while (target) {
+                e.set('currentTarget', target);
+
+                if (filter.call(sub, e)) {
+                    currentTarget = setThis ? e.get('currentTarget') : this;
+                    // arguments contains e, which has had its currentTarget
+                    // updated.
+                    details.callback.apply(currentTarget, arguments);
+                }
+
+                if (e.stopped || target === container) {
+                    break;
+                }
+
+                target = target.parentNode;
+            }
+        }
+    },
+
+    selectorFilter: function (e) {
+        var currentTarget = e.data.currentTarget,
+            container     = e.data.container,
+            root          = currentTarget === container ? null : container;
+
+        return Y.Selector.test(currentTarget, this.details.selector, root);
     },
 
     registerSub: function (target, sub) {
         var type    = sub.details.domType,
             subs    = Y._yuievt.subs,
-            capture = (sub.phase === 'capture'),
+            capture = (sub.details.phase === 'capture'),
             phase   = capture ? 'capture' : 'on';
 
         subs = subs[sub.type] || (subs[sub.type] = {});
@@ -379,7 +637,7 @@ DOMEvent = new Y.CustomEvent({
             target = args.splice(2, 1)[0];
         }
 
-        el = Y.Event._resolveTarget(target);
+        el = this.resolveTarget(target);
 
         if (el && el.nodeType) {
             eventKey = Y.stamp(el) + ':' + type;
@@ -453,172 +711,11 @@ DOMEvent = new Y.CustomEvent({
     }
 }, Y.CustomEvent.FacadeEvent);
 
+// Populate the Y.Event.DOM_EVENTS whitelist, that will also serve as the
+// prototype for the events collection for Y, Node, and NodeList.
 for (i = 0, len = EVENT_NAMES.length; i < len; ++i) {
     DOM_EVENTS[EVENT_NAMES[i]] = DOMEvent;
 }
-
-Y.Event = {
-    /**
-    DOM and synthetic event collection for sharing between Y, Node, and
-    NodeList.
-
-    @property DOM_EVENTS
-    @type {Object}
-    **/
-    DOM_EVENTS: DOM_EVENTS,
-
-    /**
-    The custom event definition (prototype) used to handle DOM events.
-    Modifying this will alter the behavior of all DOM events.
-
-    @property DOMEvent
-    @type {CustomEvent}
-    **/
-    DOMEvent: DOMEvent,
-
-    /**
-    The event facade class used by DOMEvent (aka DOMEventFacade).
-
-    @property EventFacade
-    @type {Event.EventFacade}
-    **/
-    EventFacade: DOMEventFacade,
-
-    /**
-    Whitelist an existing DOM event, customize the behavior of a whitelisted
-    event, or publish a synthetic DOM event that will masquerade as a DOM event
-    throughout the system.
-
-    @method publish
-    @param {String} type Name of the event
-    @param {Object|CustomEvent} [config] Event overrides or CustomEvent instance
-    @param {CustomEvent} [inheritsFrom] Event to use as the prototype before
-                            customizations in _config_ are applied
-    **/
-    publish: function (type, config, inheritsFrom, smart) {
-        // Default DOMEvent for Y.Event.publish('beforeunload') use case to
-        // make it easy to whitelist existing DOM events. Don't default
-        // DOMEvent for others because synthetic events have custom behavior
-        // and should relate to DOMEvent behavior only on an as-needed basis,
-        // and likely via the EventTarget API on Node/Y.
-        if (arguments.length === 1) {
-            Y.Event.DOM_EVENTS[type] = Y.Event.DOMEvent;
-        } else {
-            Y.EventTarget._publish(Y.Event, Y.Event.DOM_EVENTS,
-                type, config, inheritsFrom, smart);
-        }
-    },
-
-    /**
-    Remove all DOM event subscriptions from _target_, optionally also purging
-    subscriptions of _target_'s subtree. Specify a _type_ to limit detaching to
-    a specific event.
-
-    _target_ can be a selector string, Node, NodeList, HTMLElement, or array
-    of HTMLElements.
-
-    @method purgeElement
-    @param {String|Node|NodeList|Element|Element[]} target What to purge
-    @param {Boolean} [recurse] If truthy, also purge all descendants
-    @param {String} [type] Limit purge to this event
-    **/
-    purgeElement: function (target, recurse, type) {
-        var yuid, i, len, subs, eventKey;
-
-        target = Y.Event._resolveTarget(target);
-
-        if (target) {
-            if (target.nodeType) {
-                yuid = Y.stamp(target);
-
-                if (recurse) {
-                    // purge children, but don't return because we still need
-                    // to purge the target
-                    Y.Event.purgeElement(
-                        target.getElementsByTagName('*'), false, type);
-                }
-
-                if (type) {
-                    Y.detach(type, null, target);
-                } else {
-                    subs = Y._yuievt.subs;
-
-                    for (eventKey in subs) {
-                        if (eventKey.indexOf(yuid) === 0) {
-                            Y.detach(
-                                eventKey.slice(eventKey.lastIndexOf(':') + 1),
-                                null, target);
-                        }
-                    }
-                }
-            } else if (target.length) {
-                for (i = 0, len = target.length; i < len; ++i) {
-                    Y.Event.purgeElement(target[i], recurse, type);
-                }
-            }
-        }
-    },
-
-    /**
-    Resolves the input value to a DOM Element or array of DOM Elements.
-
-    If unsuccessful, `null` is returned.
-
-    If no target is passed, `Y.config.win` is returned.
-
-    @method _resolveTarget
-    @param {String|Node|NodeList|Element|Element[]} target
-    @return {Element|Element[]}
-    @protected
-    **/
-    _resolveTarget: function (target) {
-        if (!target || target === Y.config.win) {
-            return Y.config.win;
-        } else if (typeof target === 'string') {
-            target = Y.Selector.query(target);
-
-            if (target.length === 1) {
-                return target[0];
-            } else if (target.length > 1) {
-                return target;
-            }
-        } else if (target.nodeType || (target[0] && target[0].nodeType)) {
-            return target;
-        } else if (Y.Node) {
-            if (target instanceof Y.Node) {
-                return target._node;
-            } else if (target instanceof Y.NodeList) {
-                return target._nodes;
-            } else if (target[0] && target[0] instanceof Y.Node) {
-                return Y.all(target)._nodes;
-            }
-        }
-
-        if (isArray(target) && !target.length) {
-            return target;
-        }
-
-        return null;
-    },
-
-    /**
-    Routes a DOM event to the Notifier responsible for calling the DOM event
-    subscribers.
-
-    @method _handleEvent
-    @param {DOMEvent} e the native DOM event
-    **/
-    _handleEvent: function (e) {
-        // Inlined for old IE support rather than breaking out into submodule.
-        // The quantity of code just isn't worth it.
-        if (!e) {
-            e = event;
-        }
-
-        // fire('click', rawDOMEvent, clickedDOMElement)
-        Y.fire(e.type, e, this);
-    }
-};
 
 // Replace the events map for Y to include DOM events, allowing
 // Y.Event.publish(...) to add to Y's collection via prototypal inheritance.
