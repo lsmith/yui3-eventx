@@ -58,31 +58,37 @@ function getNode(name) {
     return node && Y.one(node);
 }
 
-Y.mix(Y.Event.EventFacade.prototype._getter, {
-    target: function () {
-        var target = this.data.target;
-
-        if (target && !(target instanceof Y.Node)) {
-            while (target.nodeType === 3) {
-                target = target.parentNode;
-            }
-
-            target = this.data.target = Y.one(target);
+function setElement(name, val) {
+    if (val) {
+        if (val._node) {
+            val = val._node;
         }
 
-        return target;
-    },
+        while (val && val.nodeType === 3) {
+            val = val.parentNode;
+        }
+    }
 
+    this.data[name] = val;
+}
+
+Y.mix(Y.Event.EventFacade.prototype._getter, {
+    target       : getNode,
     currentTarget: getNode,
     relatedTarget: getNode,
-    container: function () {
-        var container = this.data.container ||
-                        (this.subscription &&
-                         this.subscription.details &&
-                         this.subscription.details.container);
+    container    : function () {
+        var details   = this.subscription && this.subscription.details,
+            container = this.data.container || (details && details.container);
 
         return container && Y.one(container);
     }
+}, true);
+
+Y.mix(Y.Event.EventFacade.prototype._setter, {
+    target       : setElement,
+    currentTarget: setElement,
+    relatedTarget: setElement,
+    container    : setElement
 }, true);
 
 }, '', { requires: [ 'eventx-dom', 'node-core' ] });

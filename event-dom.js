@@ -2,9 +2,8 @@ YUI.add('eventx-dom', function (Y) {
 
 var isArray = Y.Lang.isArray,
     toArray = Y.Array,
-    slice   = Array.prototype.slice,
 
-    CustomEvent = Y.CustomEvent.prototype,
+    FacadeEvent = Y.CustomEvent.FacadeEvent,
 
     EVENT_NAMES =
         ('abort beforeunload blur change click close command contextmenu ' +
@@ -15,6 +14,9 @@ var isArray = Y.Lang.isArray,
          'resize select selectstart submit scroll textInput unload').split(' '),
     DOM_EVENTS = {},
     DOMEvent,
+
+    ON      = 'on',
+    CAPTURE = 'capture',
 
     webkitKeymap = {
         63232: 38, // up
@@ -67,15 +69,6 @@ Y.Event = {
     **/
     // defined below
     //EventFacade: DOMEventFacade,
-
-    /**
-    The subscription class used by DOMEvent (aka DOMSubscription).
-
-    @property EventFacade
-    @type {Event.EventFacade}
-    **/
-    // defined below
-    //Subscription: DOMSubscription,
 
     /**
     Whitelist an existing DOM event, customize the behavior of a whitelisted
@@ -229,13 +222,7 @@ function DOMEventFacade(type, target, payload) {
         }
     }
 
-    // Override getters for specific event types
-    // TODO
-    /*
-    if (DOMEventFacade._typeGetters[type]) {
-        this._getter = DOMEventFacade._typeGetters[type];
-    }
-    */
+    // TODO: local override of getters for specific event types?
 }
 
 function getKeyCode() {
@@ -256,6 +243,16 @@ function getWhich() {
     return this._event.which ||
            this._event.charCode ||
            this.get('keyCode'); // fall back to the getter for keyCode
+}
+
+function setElement(name, val) {
+    if (val) {
+        while (val.nodeType === 3) {
+            val = val.parentNode;
+        }
+    }
+
+    this.data[name] = val;
 }
 
 Y.Event.EventFacade = Y.extend(DOMEventFacade, Y.EventFacade, {
@@ -300,6 +297,13 @@ Y.Event.EventFacade = Y.extend(DOMEventFacade, Y.EventFacade, {
                     this.subscription.details &&
                     this.subscription.details.container);
         }
+    },
+
+    _setter: {
+        target       : setElement,
+        currentTarget: setElement,
+        relatedTarget: setElement,
+        container    : setElement
     },
 
     /**
@@ -411,18 +415,6 @@ Y.Event.EventFacade = Y.extend(DOMEventFacade, Y.EventFacade, {
 
         return this;
     }
-}, {
-    /**
-    Map of getters for specific event types, such as mouse, key, or touch
-    events, to avoid misapplied overhead from events other than the type
-    needing the extra logic.
-
-    @property _typeGetters
-    @type {Object}
-    @static
-    @protected
-    **/
-    _typeGetters: {}
 });
 
 // Add getter/setter for common properties to allow e.shiftKey rather than
@@ -436,45 +428,6 @@ if (Object.defineProperties) { // definePropertIES to avoid IE8's bustedness
     });
 }
 
-function DOMSubscription(target, args, details) {
-    // Does not support batch construction
-    this.target   = target;
-    this.details  = details;
-
-    this.type     = args[0];
-    this.callback = args[1];
-    this.thisObj  = args[2];
-
-    if (args.length > 3) {
-        this.payload = slice.call(args, 3);
-    }
-}
-
-// extends for instanceof support, but overrides both methods (yay, instanceof!)
-Y.Event.Subscription = Y.extend(DOMSubscription, Y.Subscription, {
-    /**
-    Call the subscribed callback with the provided event object, followed by
-    any bound subscription arguments.
-
-    @method notify
-    @param {Event.EventFacade} e DOMEventFacade to pass to callback
-    **/
-    notify: function (e) {
-        var thisObj  = this.thisObj || e.get('currentTarget'),
-            callback = this.callback;
-
-        // Unfortunate cost of back compat. Would rather deprecate once and
-        // onceAfter in favor of e.detach().
-        if (this.once) {
-            this.detach();
-        }
-
-        return this.payload ?
-            callback.apply(thisObj, [e].concat(this.payload)) :
-            callback.call(thisObj, e);
-    }
-});
-
 Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
     subscribe: function (target, args, details) {
         args = toArray(args, 0, true);
@@ -487,7 +440,7 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
         }
 
         var type    = args[0],
-            capture = (details.phase === 'capture'),
+            capture = (details.phase === CAPTURE),
             sub, el, eventKey, subs, i, len, abort;
 
         if (target === Y) {
@@ -495,30 +448,49 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
             target = args.splice(2,1)[0];
         }
 
+        // Target could be a DOM element, DOM collection, Node, NodeList, or
+        // selector that resolves to one or multiple elements.
         el = this.resolveTarget(target);
 
+        // Only create a subscription for an individual element
         if (el && (el.nodeType || el === Y.config.win)) {
-            phase = capture ? 'capture' : 'on';
+            // There are only two phases for DOM events
+            phase = capture ? CAPTURE : ON;
 
+            // Because the subscription type is overridden with the target yuid
+            // plus the type, store the original type for the native DOM sub
             details.domType = type;
 
+            // Delegate subs should have the filter parsed out of the args, and
+            // other setup as needed. See delegate()
             if (details.delegate) {
                 this.delegate(el, args, details);
+            } else if (!args[2]) {
+                // Default thisObj via function returning the currentTarget
+                args[2] = this.thisObjFn;
             }
 
+            // For uniqueness and matching the native event back to the
+            // wrapping custom event, the Subscription is given a created type.
             eventKey = args[0] = Y.stamp(el) + ':' + type;
 
-            sub = new this.Subscription(Y, args, details);
-
-            if (this.on) {
-                abort = this.on(el, sub);
-            }
+            sub   = new this.Subscription(Y, args, details);
+            abort = this.preventDups && this.isSubscribed(Y, sub);
 
             if (!abort) {
-                this.registerSub(el, sub);
-            } else if (abort.detach) {
-                sub   = abort;
-                abort = null;
+                // Custom behavior for derived events (e.g. SyntheticEvent)
+                if (this.on) {
+                    abort = this.on(el, sub);
+                }
+
+                if (!abort) {
+                    // Yay, the subscription is official!
+                    this.registerSub(el, sub);
+                } else if (abort.detach) {
+                    // this.on() returned an alternate Subscription object
+                    sub   = abort;
+                    abort = null;
+                }
             }
         } else if (el && typeof el.length === 'number') {
             subs = [];
@@ -539,61 +511,28 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
     // DOM events, having the target resolve to the Widget's boundingBox
     resolveTarget: Y.Event._resolveTarget,
 
-    delegate: function (target, args, details) {
-        var callback = args[1],
-            // remove the delegate filter from the args array
-            filter   = args.splice(2, 1)[0];
-
-        // replace the subscription callback with the delegate filter.
-        // store the original callback in the sub config
-        args[1] = this.delegateNotify;
-
-        details.callback  = callback;
-        details.target    = target;
-        details.container = target;
-        details.setThis   = !(args[2]);
-
-        if (typeof filter === 'string') {
-            details.selector = filter;
-            details.filter   = this.selectorFilter;
-        } else {
-            details.filter = filter;
-        }
+    thisObjFn: function (e) {
+        return e.get('currentTarget');
     },
 
-    delegateNotify: function (e) {
-        var sub     = e.subscription,
-            details = sub && sub.details,
-            filter  = details && details.filter,
-            container, target, currentTarget, setThis;
+    delegate: function (target, args, details) {
+        if (!args[3]) {
+            args[3] = this.thisObjFn;
+        }
 
-        if (filter) {
-            container = details.container;
-            target    = e._event.target || e._event.srcElement;
-            setThis   = details.setThis;
+        FacadeEvent.delegate.apply(this, arguments);
 
-            e.set('container', container);
+        // To support the edge case of DOM delegation when Node is not loaded,
+        // set the thisObj for delegateNotify to be Y, which hosts a getEvent
+        // method to allow it to resolve the bubble path for raw DOM element
+        // targets (not Nodes, which are EventTargets with getEvent). See
+        // delegateNotify.
+        args[2] = Y;
 
-            while (target.nodeType === 3) {
-                target = target.parentNode;
-            }
-
-            while (target) {
-                e.set('currentTarget', target);
-
-                if (filter.call(sub, e)) {
-                    currentTarget = setThis ? e.get('currentTarget') : this;
-                    // arguments contains e, which has had its currentTarget
-                    // updated.
-                    details.callback.apply(currentTarget, arguments);
-                }
-
-                if (e.stopped || target === container) {
-                    break;
-                }
-
-                target = target.parentNode;
-            }
+        // Support selector filter
+        if (typeof details.filter === 'string') {
+            details.selector = details.filter;
+            details.filter   = this.selectorFilter;
         }
     },
 
@@ -608,8 +547,8 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
     registerSub: function (target, sub) {
         var type    = sub.details.domType,
             subs    = Y._yuievt.subs,
-            capture = (sub.details.phase === 'capture'),
-            phase   = capture ? 'capture' : 'on';
+            capture = (sub.details.phase === CAPTURE),
+            phase   = capture ? CAPTURE : ON;
 
         subs = subs[sub.type] || (subs[sub.type] = {});
 
@@ -629,7 +568,7 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
             el, eventKey, capture, phase, i, len, subs;
 
         if (isSub) {
-            return CustomEvent.unsubscribe.apply(this, arguments);
+            return FacadeEvent.unsubscribe.apply(this, arguments);
         }
 
         if (target === Y) {
@@ -641,11 +580,11 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
 
         if (el && el.nodeType) {
             eventKey = Y.stamp(el) + ':' + type;
-            capture  = (args[2] === 'capture');
-            phase    = capture ? 'capture' : 'on';
+            capture  = (args[2] === CAPTURE);
+            phase    = capture ? CAPTURE : ON;
             subs     = Y._yuievt.subs;
 
-            CustomEvent.unsubscribe.call(this, Y,
+            FacadeEvent.unsubscribe.call(this, Y,
                 [eventKey, args[1], phase]);
 
             // No more subs, remove the DOM subscription
@@ -661,7 +600,7 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
 
     fire: function (target, type, event, currentTarget) {
         var eventKey = Y.stamp(currentTarget) + ':' + type,
-            phase    = (event.eventPhase === 1) ? 'capture' : 'on',
+            phase    = (event.eventPhase === 1) ? CAPTURE : ON,
             subs     = Y._yuievt.subs[eventKey],
             e, i, len, sub, ret;
 
@@ -683,7 +622,7 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
 
             e.subscription = sub;
 
-            ret = sub.notify(e);
+            ret = sub.notify([e]);
 
             e.subscription = null;
 
@@ -698,9 +637,23 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
         }
     },
 
-    Event       : DOMEventFacade,
+    // Used for DOM event delegation
+    resolveBubblePath: function (el) {
+        while (el.nodeType === 3) {
+            el = el.parentNode;
+        }
 
-    Subscription: DOMSubscription,
+        var targets = [];
+
+        while (el) {
+            targets.push(el);
+            el = el.parentNode;
+        }
+
+        return targets;
+    },
+
+    Event       : DOMEventFacade,
 
     _addDOMSub: function (el, type, capture) {
         YUI.Env.add(el, type, Y.Event._handleEvent, capture);
@@ -709,7 +662,7 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
     _removeDOMSub: function (el, type, capture) {
         YUI.Env.remove(el, type, Y.Event._handleEvent, capture);
     }
-}, Y.CustomEvent.FacadeEvent);
+}, FacadeEvent);
 
 // Populate the Y.Event.DOM_EVENTS whitelist, that will also serve as the
 // prototype for the events collection for Y, Node, and NodeList.
