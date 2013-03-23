@@ -17,7 +17,8 @@ var isObject   = Y.Lang.isObject,
     slice      = ArrayProto.slice,
 
     STRING     = 'string',
-    BEFORE     = 'before',
+    FUNCTION   = 'function',
+    ON         = 'on',
     AFTER      = 'after',
 
     DEFAULT     = '@default',
@@ -60,9 +61,18 @@ function Subscription(target, args, details) {
     this.target   = target;
     this.details  = details;
 
-    this.type     = args[0];
-    this.callback = args[1];
-    this.thisObj  = args[2];
+    this.type      = args[0];
+    this.callback  = args[1];
+    this.thisObj   = args[2];
+
+    // Support contextFn in the form of thisObj passed as a function
+    if (typeof this.thisObj === FUNCTION) {
+        this.contextFn = this.thisObj;
+        this.thisObj   = null;
+    }
+
+    // Support late binding of callback function
+    this.lateBound = (typeof this.callback === STRING);
 
     if (args.length > 3) {
         this.payload = slice.call(args, 3);
@@ -80,14 +90,28 @@ Subscription.prototype = {
                             EventFacade object.
     **/
     notify: function (args) {
-        var thisObj = this.thisObj || this.target,
+        var thisObj  = this.thisObj,
+            callback = this.callback,
             ret;
 
         if (this.payload) {
-            args = args ? args.concat(this.payload) : this.payload;
+            if (args) {
+                args = toArray(args, 0, true);
+                push.apply(args, this.payload);
+            }  else {
+                args = this.payload;
+            }
         }
 
-        ret = this.callback.apply(thisObj, args);
+        if (!thisObj) {
+            // TODO: Smart to allow contextFn to decide thisObj based on
+            // additional subscription args? Foot gun?
+            thisObj = (this.contextFn && this.contextFn.apply(this, args)) ||
+                      this.target;
+        }
+
+        ret = (this.lateBound ? thisObj[callback] : callback)
+                .apply(thisObj, args);
 
         // Unfortunate cost of back compat. Would rather deprecate once and
         // onceAfter in favor of e.detach(), but that would still leave
@@ -558,21 +582,28 @@ CustomEvent.prototype = {
     **/
     isSubscribed: function (target, sub) {
         if (target._yuievt) {
+            if (sub.details && sub.details.originalSub) {
+                sub = sub.details.originalSub;
+            }
+
             var type     = sub.type,
                 subs     = target._yuievt.subs[type],
                 details  = sub.details,
                 phase    = details.phase,
-                delegate = details.delegate,
-                callback = (delegate ? details : sub).callback,
+                callback = sub.callback,
                 cmp, i;
 
             if (subs && subs[phase]) {
                 subs = subs[phase];
                 for (i = subs.length - 1; i >= 0; --i) {
                     cmp = subs[i];
+                    if (cmp.details && cmp.details.originalSub) {
+                        cmp = cmp.details.originalSub;
+                    }
+
                     if (type     === cmp.type
                     &&  phase    === cmp.details.phase
-                    &&  callback === (delegate ? cmp.details : cmp).callback) {
+                    &&  callback === cmp.callback) {
                         return true;
                     }
                 }
@@ -613,7 +644,7 @@ CustomEvent.prototype = {
                 payload = toArray(arguments, 2, true);
             }
 
-            ret = this.notify(path, type, payload, BEFORE);
+            ret = this.notify(path, type, payload, ON);
 
             if (ret !== false) {
                 this.notify(path, type, payload, AFTER);
@@ -718,7 +749,7 @@ CustomEvent.prototype = {
 
     /**
     Executes all the subscribers in a bubble path for an event in a given
-    phase ("before" or "after").  Used by `fire()`.
+    phase ("on" or "after").  Used by `fire()`.
     
     If a subscriber calls `e.stopImmediatePropagation()`, no
     further subscribers will be executed, and if a subscriber calls
@@ -981,25 +1012,26 @@ CustomEvent.FacadeEvent = new CustomEvent({
     @param {Object} details The subscription metadata (e.g. phase, etc)
     **/
     delegate: function (target, args, details) {
-        var callback = args[1],
-            // remove the delegate filter from the args array
-            filter   = args.splice(2, 1)[0];
+        // remove the delegate filter from the args array
+        var filter = args.splice(2, 1)[0];
 
-        // replace the subscription callback with the delegate filter.
-        // store the original callback in the details
-        args[1] = this.delegateNotify;
+        details.originalSub =
+            new this.Subscription(target, args, Y.merge(details));
 
-        details.callback = callback;
-        details.filter   = filter;
-        details.target   = target;
+        details.filter    = filter;
+        details.container = target;
+
+        // [type, callback, thisObj, ...args] => [type, delegateNotify]
+        // Replace the subscription args with the delegate filter and remove
+        // additional sub args to avoid contaminating the delegate sub.
+        args.splice(1, args.length - 1, this.delegateNotify);
     },
 
     /**
-    Executes subscribers for the "before" (aka "on") phase for all targets
-    in the bubble chain until propagation is stopped or the last target is
-    notified.  If not prevented and if the event has one, the default
-    behavior is executed followed by the subscribers for the "after"
-    phase up the bubble chain.
+    Executes subscribers for the "on" phase for all targets in the bubble chain
+    until propagation is stopped or the last target is notified.  If not
+    prevented and if the event has one, the default behavior is executed
+    followed by the subscribers for the "after" phase up the bubble chain.
     
     If the event is prevented and it has one, the `preventedFn`
     method is executed.  "after" phase subscribers are not executed if the
@@ -1047,7 +1079,7 @@ CustomEvent.FacadeEvent = new CustomEvent({
             }
 
             // on() subscribers
-            ret = this.notify(path, type, args, BEFORE);
+            ret = this.notify(path, type, args, ON);
 
             if (ret === false) {
                 event.halt(true);
@@ -1102,7 +1134,7 @@ CustomEvent.FacadeEvent = new CustomEvent({
 
     /**
     Executes all the subscribers in a bubble path for an event in a given
-    phase ("before" or "after").  Used by `fire()`.
+    phase ("on" or "after").  Used by `fire()`.
     
     If a subscriber calls `e.stopImmediatePropagation()`, no further
     subscribers will be executed. Otherwise, if a subscriber calls
@@ -1172,13 +1204,22 @@ CustomEvent.FacadeEvent = new CustomEvent({
         var sub     = e && e.subscription,
             details = sub && sub.details,
             filter  = details && details.filter,
-            container, target, defaultThis, path, i, len;
+            target, event, path, container, i, len;
 
         if (filter) {
-            container   = details.container;
-            defaultThis = (container === this);
-            target      = e.get('target');
-            path        = target.getEvent(e.type).resolveBubblePath(target);
+            container = details.container;
+            target    = e.get('target');
+            // Kind of a hacky fallback exploited for DOM event delegation.
+            // For custom event delegation and DOM event delegation when Node
+            // is loaded, the target will be the firing EventTarget (or Node),
+            // but for DOM delegation when Node isn't loaded (edge case city!),
+            // the target will be the raw DOM element, which obviously isn't
+            // an EventTarget. I should do an instanceof test, but a feature
+            // test seems acceptable unless in the future, native DOM element
+            // objects get a getEvent() method. Still, that use case is an edge
+            // case, so I'm willing to gamble.
+            event     = (target.getEvent ? target : this).getEvent(e.type);
+            path      = event.resolveBubblePath(e.data.target);
 
             e.set('container', container);
 
@@ -1188,8 +1229,7 @@ CustomEvent.FacadeEvent = new CustomEvent({
                 if (filter.call(sub, e)) {
                     // arguments contains e, which has had its currentTarget
                     // updated.
-                    details.callback
-                        .apply((defaultThis ? path[i] : this), arguments);
+                    details.originalSub.notify(arguments);
                 }
 
                 // e.stopPropagation() behaves as though the event were
@@ -1461,8 +1501,7 @@ Y.mix(EventTarget, {
                     superEvent = CustomEvent.FacadeEvent;
                 }
 
-                defaultEvent =
-                    new CustomEvent(DEFAULT, defaultEvent, superEvent);
+                defaultEvent = new CustomEvent(defaultEvent, superEvent);
             }
 
             Class.events[DEFAULT] = defaultEvent;
@@ -1686,7 +1725,7 @@ EventTarget.prototype = {
     },
 
     /**
-    Subscribe to an event on this object.  Subscribers in this "before"
+    Subscribe to an event on this object.  Subscribers in this "on"
     phase will have access to prevent any default event behaviors (if the
     event permits prevention).
     
@@ -1716,7 +1755,7 @@ EventTarget.prototype = {
     @return {Subscription}
     **/
     on: function (/*type, callback, thisObj, ...args*/) {
-        return this._subscribe(arguments, { phase: BEFORE });
+        return this._subscribe(arguments, { phase: ON });
     },
 
     /**
@@ -1756,9 +1795,8 @@ EventTarget.prototype = {
 
     /**
     Subscribe to an event on this object.  This method is a catchall
-    for events that might support more than the standard "before" (aka
-    "on") and "after" phases.  This method allows for subscription to
-    any event phase.
+    for events that might support more than the standard "on" and "after"
+    phases.  This method allows for subscription to any event phase.
     
     _type_ may be a string identifying the event, an array of event names,  or
     an object map of types to callback functions.
@@ -1780,14 +1818,14 @@ EventTarget.prototype = {
     class or instance. If either no smart events have been published or none
     match the subscription signature, the default event behavior will be used.
 
-    _phase_ may be a string (e.g. "before" or "after") or a configuration
+    _phase_ may be a string (e.g. "on" or "after") or a configuration
     object containing any of the following properties:
-    * "phase" - (required) Typically "before" or "after", but may be custom
+    * "phase" - (required) Typically "on" or "after", but may be custom
     * "once" - Truthy if the subscription should be detached after notification
     * "delegate" - Truthy if the args correspond to a delegate signature
 
     Use an object config to create special subscriptions, such as one-time
-    delegated subscriptions in non-"before" phases:
+    delegated subscriptions in non-"on" phases:
 
     ```
     var subConfig = {
@@ -1822,7 +1860,7 @@ EventTarget.prototype = {
 
     /**
     Subscribe to the next firing of a specified event on this object.
-    Subscribers in this "before" phase will have access to prevent any default
+    Subscribers in this "on" phase will have access to prevent any default
     event behaviors (if the event permits prevention).
     
     Behaves as `on()`, but automatically detaches the subscription after the
@@ -1837,7 +1875,7 @@ EventTarget.prototype = {
     @return {Subscription}
     **/
     once: function (/*type, callback, thisObj, ...args*/) {
-        return this._subscribe(arguments, { phase: BEFORE, once: true });
+        return this._subscribe(arguments, { phase: ON, once: true });
     },
 
     /**
@@ -1882,7 +1920,7 @@ EventTarget.prototype = {
     @return {Subscription}
     **/
     delegate: function (/*type, callback, filterFn, thisObj, ...args*/) {
-        return this._subscribe(arguments, { phase: BEFORE, delegate: true });
+        return this._subscribe(arguments, { phase: ON, delegate: true });
     },
 
     /**
@@ -1897,7 +1935,7 @@ EventTarget.prototype = {
     all else fails, the default event will be used.
 
     The _details_ object may include the following properties:
-    * "phase" - (required) Typically "before" or "after", but may be custom
+    * "phase" - (required) Typically "on" or "after", but may be custom
     * "once" - Truthy if the subscription should be detached after notification
     * "delegate" - Truthy if the args correspond to a delegate signature
     
@@ -2013,13 +2051,13 @@ EventTarget.prototype = {
                 <td>All subscriptions to event "foo" in all phases</td>
             </tr>
             <tr>
-                <td>`detach("foo", "before")`</td>
-                <td>All subscriptions to event "foo" in the "before"
+                <td>`detach("foo", "on")`</td>
+                <td>All subscriptions to event "foo" in the "on"
                     phases</td>
             </tr>
             <tr>
-                <td>`detach("foo", "before", callbackFunc)*`</td>
-                <td>All subscriptions to event "foo" in the "before"
+                <td>`detach("foo", "on", callbackFunc)*`</td>
+                <td>All subscriptions to event "foo" in the "on"
                     phase that are bound to callbackFunc  (*See below for
                     notes)</td>
             </tr>
