@@ -6,38 +6,21 @@ Backward compatibility shim for Y.Event.define.
 @submodule eventx-synthetic
 @for Y.Event
 **/
-var toArray = Y.Array,
-    nodeMap = Y.Node._instances,
+var nodeMap = Y.Node._instances,
     DOMEvent = Y.Event.DOMEvent,
     NOOP = function () {};
 
 function SynthSubscription() {
-    Y.Event.DOMEvent.Subscription.apply(this, arguments);
+    DOMEvent.Subscription.apply(this, arguments);
 }
 
 Y.extend(SynthSubscription, DOMEvent.Subscription, {
     notify: function (args) {
-        var e       = args && args[0],
-            thisObj = this.thisObj ||
-                      (e && e.get && e.get('currentTarget')) ||
-                      nodeMap[this.details.nodeYuid]; // default to container?
-
-        if (e && e.type) {
-            e.type = this.details.domType;
+        if (args[0] && args[0].type) {
+            args[0].type = this.details.domType;
         }
 
-        if (this.payload) {
-            args = toArray(args);
-            args.push.apply(args, this.payload);
-        }
-
-        // Unfortunate cost of back compat. Would rather deprecate once
-        // and onceAfter in favor of e.detach().
-        if (this.once) {
-            this.detach();
-        }
-
-        return this.callback.apply(thisObj, args);
+        return DOMEvent.Subscription.prototype.notify.apply(this, arguments);
     },
 
     // To mock the notifier object from current synth infrastructure
@@ -47,69 +30,43 @@ Y.extend(SynthSubscription, DOMEvent.Subscription, {
 });
 
 Y.Event.SyntheticEvent = new Y.CustomEvent({
-    subscribe: function (target, args, phase, delegate) {
-        var method = (delegate && this._oldDelegate) ? '_oldDelegate' : 'on',
-            type   = args[0],
-            details, sub, filter, el, node, eventKey, subs, i, len;
+    parseSignature: function (target, args, details) {
+        var extras;
 
-        args = toArray(args, 0, true);
+        if (this.processArgs) {
+            extras = this.processArgs(args, details.delegate);
 
-        // processArgs rather than parseSignature for back compat
-        details = this.processArgs && this.processArgs(args, delegate);
-
-        if (target === Y) {
-            target = args.splice(2,1)[0];
+            if (extras) {
+                Y.mix(details, extras, true);
+            }
         }
+    },
 
-        el = Y.Event._resolveTarget(target);
+    on: function (el, sub) {
+        var details = sub.details,
+            node    = Y.one(el),
+            method  = (details.delegate && this._oldDelegate) ?
+                        '_oldDelegate' : '_oldOn';
 
-        if (el && (el.nodeType || el === Y.config.win)) {
-            node = Y.one(el);
+        details.nodeYuid = node._yuid;
 
-            if (delegate) {
-                filter = args.splice(2, 1)[0];
-            }
-
-            eventKey = args[0] = Y.stamp(el) + ':' + type;
-
-            if (!details) {
-                details = {};
-            }
-
-            details.domType  = type;
-            details.nodeYuid = node._yuid;
-
-            sub = new this.Subscription(Y, args, 'on', details);
-
-            if (this.preventDups && this.isSubscribed(Y, sub)) {
-                return null;
-            }
-
-            // either this.on or this._oldDelegate. Not this.delegate because
-            // the method is inherited from CE.proto when eventx-delegate is
-            // use()d, and this.hasOwnProperty('delegate') doesn't support
-            // prototypal inheritance for synthetics.
-            if (this[method]) {
-                // notifier and subscription are the same object
-                // filter is passed to allow on() to handle individual and
-                // delegate subscriptions
-                this[method](node, sub, sub, filter);
-            }
-
-            this.registerSub(Y, sub);
-        } else if (el && el.length) {
-            subs = [];
-            for (i = 0, len = el.length; i < len; ++i) {
-                // args[0] is assigned the eventKey. Need to reset it.
-                args[0] = type;
-                subs.push(this.subscribe(el[i], args, phase, delegate));
-            }
-
-            // Return batch subscription
-            sub = new Y.BatchSubscription(subs);
+        if (this[method]) {
+            // Pass the filter even to _oldOn() because it's harmless, since
+            // the signature is expecting only three args. Also, it should
+            // allow some synths to remove their delegate config, since it
+            // only relayed to on() anyway.
+            this[method](node, sub, sub, details.filter);
         }
+    },
 
-        return sub;
+    // Extract the filter only. Delegation logic is mostly deferred to
+    // the forking to event._oldDelegate() from event.on()
+    delegate: function (target, args, details) {
+        details.filter = args.splice(2, 1)[0];
+
+        if (!args[2]) {
+            args[2] = this.thisObjFn;
+        }
     },
 
     detach: function (target, sub) {
@@ -123,13 +80,15 @@ Y.Event.SyntheticEvent = new Y.CustomEvent({
         }
     },
 
-    delegate: function (target, args) {
-        return this.subscribe(target, args, 'before', true);
+    thisObjFn: function (e) {
+        return (e && e.get && e.get('currentTarget')) ||
+                  nodeMap[this.details.nodeYuid]; // default to container?
     },
 
     Subscription: SynthSubscription,
 
-    _addDOMSub: NOOP,
+    // No actual DOM sub is added directly by SyntheticEvent
+    _addDOMSub   : NOOP,
     _removeDOMSub: NOOP
 }, DOMEvent);
 
@@ -141,6 +100,11 @@ Y.Event.define = function (type, config, force) {
             config._oldDetach = config.detach;
             // Don't override the SyntheticEvent's detach
             delete config.detach;
+        }
+
+        if (config.on) {
+            config._oldOn = config.on;
+            delete config.on;
         }
 
         if (config.delegate) {
