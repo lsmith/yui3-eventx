@@ -1,4 +1,3 @@
-YUI.add('eventx-onload', function (Y) {
 /**
 Wraps the window.onload event in a fireOnce custom event and overrides the
 registered DOM event to route to the custom event when subscribing to 'load'
@@ -69,5 +68,3 @@ Y.Event.DOM_EVENTS.load = new Y.CustomEvent({
         }
     }
 }, DOMEvent);
-
-}, '', { requires: ['eventx-dom'] });

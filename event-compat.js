@@ -1,5 +1,3 @@
-YUI.add('eventx-compat', function (Y) {
-
 /**
 Compatibility shim for Classes, properties, and methods from the original event
 system.
@@ -53,5 +51,3 @@ EventFacade = function (type, target, payload) {
 };
 
 EventFacade.prototype = EFproto;
-
-}, '', { requires: [ 'eventx-base' ] });

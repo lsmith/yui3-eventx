@@ -1,4 +1,3 @@
-YUI.add('eventx-base', function (Y) {
 /**
  * Alternate event API augmentation class.
  *
@@ -26,8 +25,8 @@ var isObject   = Y.Lang.isObject,
     UNSUBSCRIBE = '@unsubscribe',
     FIRE        = '@fire',
 
-    NULL       = function () { return null; },
-    NOOP       = function () { };
+    NOOP        = function () {},
+    ABORT       = {}; // Used for fireOnce events that were stopped
 
 
 /**
@@ -63,12 +62,14 @@ function Subscription(target, args, details) {
 
     this.type      = args[0];
     this.callback  = args[1];
-    this.thisObj   = args[2];
 
     // Support contextFn in the form of thisObj passed as a function
-    if (typeof this.thisObj === FUNCTION) {
-        this.contextFn = this.thisObj;
-        this.thisObj   = null;
+    var thisObj    = args[2];
+
+    if (typeof thisObj === FUNCTION) {
+        this.contextFn = thisObj;
+    } else {
+        this.thisObj   = thisObj;
     }
 
     // Support late binding of callback function
@@ -529,8 +530,11 @@ CustomEvent.prototype = {
             this.parseSignature(target, args, details);
         }
 
-        var sub   = new this.Subscription(target, args, details),
-            abort = this.preventDups && this.isSubscribed(target, sub);
+        var yuievt = target._yuievt,
+            fired  = this.fireOnce && yuievt.fired && yuievt.fired[args[0]],
+            sub    = (fired !== ABORT) &&
+                        new this.Subscription(target, args, details),
+            abort  = sub && this.preventDups && this.isSubscribed(target, sub);
 
         if (!abort) {
             if (this.on) {
@@ -538,7 +542,7 @@ CustomEvent.prototype = {
             }
 
             // Register the subscription
-            if (!abort) {
+            if (!abort && !fired) {
                 this.registerSub(target, sub);
             } else if (abort.detach) {
                 // Allow on() to return an alternate Subscription.
@@ -546,6 +550,11 @@ CustomEvent.prototype = {
                 // appropriate target.
                 sub   = abort;
                 abort = false;
+            }
+
+            if (this.fireOnce && fired) {
+                sub.notify(fired);
+                abort = true;
             }
         }
 
@@ -633,13 +642,16 @@ CustomEvent.prototype = {
     @param args* {any} additional args passed `fire(type, _here_...)`
     **/
     fire: function (target, type) {
-        var path = (this.bubbles && target._yuievt.bubblePath) ?
-                    this.resolveBubblePath(target) : [target],
+        var yuievt   = target._yuievt,
+            path     = (this.bubbles && yuievt.bubblePath) ?
+                        this.resolveBubblePath(target) : [target],
+            fireOnce = this.fireOnce,
+            fired    = fireOnce && yuievt.fired && yuievt.fired[type],
             payload, ret;
 
         // Only proceed if there are subscribers or it's a fireOnce event that
         // hasn't been fired
-        if (this.hasSubs(path, type) || (this.fireOnce && !this._firedWith)) {
+        if (this.hasSubs(path, type) || (fireOnce && !fired)) {
             if (arguments.length > 2) {
                 payload = toArray(arguments, 2, true);
             }
@@ -651,21 +663,14 @@ CustomEvent.prototype = {
             }
         }
 
-        if (this.fireOnce && !this._firedWith) {
+        if (fireOnce && !fired) {
             // Clear subscribers
-            target._yuievt.subs[type] = null;
+            yuievt.subs[type] = null;
 
-            // Republish the event on the instance, rerouting subscribe to
-            // `immediate` unless a callback returned false, in which case, the
-            // event is dead, so subscribe() and fire() are no-ops.
-            target.publish(type, (ret === false) ? {
-                subscribe: NULL,
-                fire     : NOOP
-            } : {
-                subscribe : this.immediate,
-                // cache the event it was initially fired with
-                _firedWith: payload || []
-            });
+            if (!yuievt.fired) {
+                yuievt.fired = {};
+            }
+            yuievt.fired[type] = (ret === false) ? ABORT : (payload || []);
         }
     },
 
@@ -789,32 +794,6 @@ CustomEvent.prototype = {
                 }
             }
         }
-    },
-
-    /**
-    Replacement for the subscribe method on fireOnce events after they've
-    fired.  Immediately executes the would-be subscription.
-    
-    @method immediate
-    @param {EventTarget} target The instance from which on/after was called
-    @param {Array} args Subscription arguments for the event (type, callback,
-                        context, and extra args)
-    @param {Object} details The subscription metadata (e.g. phase, etc)
-    @return {null}
-    **/
-    immediate: function (target, args, details) {
-        var payload = this._firedWith;
-
-        if (this.parseSignature) {
-            this.parseSignature(target, args, details);
-        }
-
-        new this.Subscription(target, args, details)
-            .notify(payload);
-
-        // TODO: Should I return the sub if it was created, even though it
-        // doesn't get stored?
-        return null;
     },
 
     /**
@@ -970,6 +949,10 @@ CustomEvent.FacadeEvent = new CustomEvent({
     emitFacade: true,
 
     subscribe: function (target, args, details) {
+        if (!isArray(args)) {
+            args = toArray(args, 0, true);
+        }
+
         if (this.parseSignature) {
             this.parseSignature(target, args, details);
         }
@@ -978,8 +961,16 @@ CustomEvent.FacadeEvent = new CustomEvent({
             this.delegate(target, args, details);
         }
 
-        var sub   = new this.Subscription(target, args, details),
-            abort = this.preventDups && this.isSubscribed(target, sub);
+        var yuievt = target._yuievt,
+            fired  = this.fireOnce && yuievt.fired && yuievt.fired[args[0]],
+            abort  = fired &&
+                        (fired === ABORT ||
+                        (details.phase === AFTER && fired[0].prevented)),
+            sub    = !abort && new this.Subscription(target, args, details);
+
+        if (sub && this.preventDups) {
+            abort = this.isSubscribed(target, sub);
+        }
 
         if (!abort) {
             // Custom behavior hook
@@ -988,7 +979,7 @@ CustomEvent.FacadeEvent = new CustomEvent({
             }
 
             // Register the subscription
-            if (!abort) {
+            if (!abort && !fired) {
                 this.registerSub(target, sub);
             } else if (abort.detach) {
                 // Allow on() to return an alternate Subscription.
@@ -996,6 +987,11 @@ CustomEvent.FacadeEvent = new CustomEvent({
                 // appropriate target.
                 sub   = abort;
                 abort = false;
+            }
+
+            if (this.fireOnce && fired) {
+                sub.notify(fired);
+                abort = true;
             }
         }
 
@@ -1047,10 +1043,12 @@ CustomEvent.FacadeEvent = new CustomEvent({
     @param args* {any} additional args passed `fire(type, _here_...)`
     **/
     fire: function (target, type) {
-        var path    = target._yuievt.bubblePath && this.bubbles ?
-                        this.resolveBubblePath(target) :
-                        [target],
-            hasSubs = this.hasSubs(path, type),
+        var yuievt   = target._yuievt,
+            path     = (this.bubbles && yuievt.bubblePath) ?
+                        this.resolveBubblePath(target) : [target],
+            fireOnce = this.fireOnce,
+            fired    = fireOnce && yuievt.fired && yuievt.fired[type],
+            hasSubs  = this.hasSubs(path, type),
             event, payload, args, ret;
 
         // Only proceed if:
@@ -1058,7 +1056,7 @@ CustomEvent.FacadeEvent = new CustomEvent({
         // * it's a fireOnce event that hasn't been fired, OR
         // * it has a defaultFn, but isn't a fireOnce event that has already
         //   been fired
-        if (!hasSubs && (this._firedWith || !this.defaultFn)) {
+        if (!hasSubs && (fired || !this.defaultFn)) {
             return;
         }
 
@@ -1068,16 +1066,16 @@ CustomEvent.FacadeEvent = new CustomEvent({
 
         event = new this.Event(type, target, payload);
 
-        if (hasSubs) {
-            // Unfortunate cost, and assumption of behavior of this.Event to
-            // subsume the object in payload[0] onto the facade :(
-            if (payload) {
-                args = payload.slice(isObject(payload[0], true) ? 1 : 0);
-                args.unshift(event);
-            } else {
-                args = [event];
-            }
+        // Unfortunate cost, and assumption of behavior of this.Event to
+        // subsume the object in payload[0] onto the facade :(
+        if (payload) {
+            args = payload.slice(isObject(payload[0], true) ? 1 : 0);
+            args.unshift(event);
+        } else {
+            args = [event];
+        }
 
+        if (hasSubs) {
             // on() subscribers
             ret = this.notify(path, type, args, ON);
 
@@ -1113,22 +1111,14 @@ CustomEvent.FacadeEvent = new CustomEvent({
             }
         }
 
-        if (this.fireOnce && !this._firedWith) {
+        if (fireOnce && !fired) {
             // Clear subscribers
-            target._yuievt.subs[type] = null;
+            yuievt.subs[type] = null;
 
-            // Republish the event on the instance, rerouting subscribe to
-            // `immediate` unless e.stopImmediatePropagation() was called,
-            // in which case, the event is dead, so subscribe() and fire() are
-            // no-ops.
-            target.publish(type, (event.stopped === 2) ? {
-                subscribe: NULL,
-                fire     : NOOP
-            } : {
-                subscribe : this.immediate,
-                // cache the event it was initially fired with
-                _firedWith: args || []
-            });
+            if (!yuievt.fired) {
+                yuievt.fired = {};
+            }
+            yuievt.fired = (event.stopped === 2) ? ABORT : args;
         }
     },
 
@@ -1265,41 +1255,7 @@ CustomEvent.FacadeEvent = new CustomEvent({
     @type {Boolean}
     @default `true`
     **/
-    preventable: true,
-
-    /**
-    Replacement for the subscribe method on fireOnce events after they've
-    fired.  Immediately executes the would-be subscription.
-    
-    @method immediate
-    @param {EventTarget} target The instance from which on/after was called
-    @param {Array} args Subscription arguments for the event (type, callback,
-                        context, and extra args)
-    @param {Object} details The subscription metadata (e.g. phase, etc)
-    @return {null}
-    **/
-    immediate: function (target, args, details) {
-        var payload = this._firedWith,
-            event   = payload[0];
-
-        if (event.stopped < 2
-        && (details.phase !== AFTER || !event.prevented)) {
-            if (this.parseSignature) {
-                this.parseSignature(target, args, details);
-            }
-
-            event.set('currentTarget', target);
-
-            new this.Subscription(target, args, details)
-                .notify(payload);
-
-            event.set('currentTarget', null);
-        }
-
-        // TODO: Should I return the sub if it was created, even though it
-        // doesn't get stored?
-        return null;
-    }
+    preventable: true
 });
 
 /**
@@ -1438,6 +1394,18 @@ function EventTarget(defaults) {
 
 Y.mix(EventTarget, {
     /**
+    Map of class level event configurations that will be available to all
+    instances, keyed by the event name.
+
+    @property events
+    @type {Object}
+    @static
+    **/
+    events: {
+        '@default': new CustomEvent()
+    },
+
+    /**
     Configures a class as an EventTarget, adding the static `publish()` method,
     constructing its default event, and publishing any specific class events.
 
@@ -1467,8 +1435,7 @@ Y.mix(EventTarget, {
     **/
     configure: function (Class, events, defaultEvent) {
         var superEvents = Class.superclass &&
-                          Class.superclass.constructor.events,
-            superEvent;
+                          Class.superclass.constructor.events;
 
         // Add the static publish method to the class
         Class.publish = function (type, config, inheritsFrom, smart) {
@@ -1477,34 +1444,44 @@ Y.mix(EventTarget, {
                         type, config, inheritsFrom, smart);
         };
 
-        if (!Class.events) {
-            Class.events = {};
+        // Class.events was declared statically in the class definition
+        // rather than passed to EventTarget.configure(Class, HERE), so
+        // default the Class.events collection and use the existing static
+        // collection as a map of events to publish.
+        if (Class.events
+        &&  Class.events !== EventTarget.events
+        &&  !EventTarget.events.isPrototypeOf(Class.events)) {
+            events = events ? Y.merge(Class.events, events) : Class.events;
+
+            Class.events = null;
         }
 
-        // Create the class's @default event if necessary
-        if (Class.events[DEFAULT]) {
-            if (defaultEvent) {
-                Class.publish(DEFAULT, defaultEvent);
+        if (!Class.events) {
+            if (!superEvents && events
+            &&  EventTarget.events.isPrototypeOf(events)) {
+                // configuring with another class's events collection
+                // e.g. EventTarget.configure(Base, BaseObservable.events);
+                // Notice that superclass.events trumps.
+                Class.events = proto(events);
+                events = null;
+            } else {
+                // TODO: Is it wise to assume EventTarget events or should it
+                // be a clean slate?
+                Class.events = proto(superEvents || EventTarget.events);
             }
-        } else {
-            if (!defaultEvent || !(defaultEvent instanceof CustomEvent)) {
-                if (superEvents) {
-                    superEvent = superEvents[DEFAULT];
-                }
+        }
 
-                // Weak point. Disregarding superclass default event if
-                // configured with emitFacade. If the superclass default event
-                // is also configured with emitFacade, it's assumed to be a
-                // FacadeEvent.
-                if (defaultEvent && defaultEvent.emitFacade &&
-                        (!superEvent || !superEvent.emitFacade)) {
-                    superEvent = CustomEvent.FacadeEvent;
-                }
-
-                defaultEvent = new CustomEvent(defaultEvent, superEvent);
+        // Apply @default event overrides
+        if (defaultEvent) {
+            // Weak point. Disregarding superclass default event if
+            // configured with emitFacade. If the superclass default event
+            // is also configured with emitFacade, it's assumed to be a
+            // FacadeEvent.
+            if (defaultEvent.emitFacade && !Class.events[DEFAULT].emitFacade) {
+                Class.events[DEFAULT] = CustomEvent.FacadeEvent;
             }
 
-            Class.events[DEFAULT] = defaultEvent;
+            Class.publish(DEFAULT, defaultEvent);
         }
 
         if (events) {
@@ -1601,10 +1578,14 @@ Y.mix(EventTarget, {
             event, i, name;
 
         if (isObject(type)) {
+            // publish({ events }, inheritsFrom, smart) =>
+            // _publish(target, events, { configs }, inheritsFrom, smart),
+            // missing the fourth param for config, so inheritsFrom is captured
+            // in the config param and smart in inheritsFrom param
             for (event in type) {
                 if (type.hasOwnProperty(event)) {
                     EventTarget._publish(target, events, event,
-                        type[event], inheritsFrom, smart);
+                        type[event], config, inheritsFrom);
                 }
             }
         } else {
@@ -1662,7 +1643,12 @@ Y.mix(EventTarget, {
 
                     events[name].registerEvent(event);
                 }
-            } else {
+            } else if (!events[type] || events[type] !== event) {
+                // Only assign the event to the events collection if the event
+                // isn't already there. This protects against the case of
+                // publishing a superclass's events collection, where all events
+                // are already CustomEvents. No need to shadow the event on the
+                // events object prototype (the superclass's events collection).
                 events[type] = event;
             }
 
@@ -1982,7 +1968,9 @@ EventTarget.prototype = {
                             // the key and value of the object.
                             args[0] = event;
                             args[1] = type[event];
-                            subs.push(this._subscribe(args, Y.merge(details)));
+                            subs.push(this._subscribe(
+                                args.slice(),
+                                Y.merge(details)));
                         }
                     }
                 }
@@ -2146,8 +2134,31 @@ EventTarget.prototype = {
 
         if (!path) {
             this._yuievt.bubblePath = [target];
-        } else if (arrayIndex(path, target) === -1) {
+        } else {
+            // This is more fragile than only adding it to the list if it's
+            // not there yet. The default implementation of CustomEvent's
+            // resolveBubblePath prunes duplicates, but it can be overridden
+            // by publish()
             path.push(target);
+        }
+
+        return this;
+    },
+
+    /**
+    Removes a bubble target from this instance.
+    
+    @method removeTarget
+    @param target {Object} instance of an object augmented with Event.API
+    @return {Object} this instance
+    @chainable
+    **/
+    addTarget: function (target) {
+        var path  = this._yuievt.bubblePath,
+            index = path && arrayIndex(path, target);
+
+        if (index !== -1 && typeof index === 'number') {
+            this._yuievt.bubblePath.splice(index, 1);
         }
 
         return this;
@@ -2179,5 +2190,3 @@ events, presumably).
 @type {EventTarget}
 **/
 Y.Global = YUI.Env.globalEvents || (YUI.Env.globalEvents = new EventTarget());
-
-}, '', { requires: ['oop'] });

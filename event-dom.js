@@ -1,5 +1,3 @@
-YUI.add('eventx-dom', function (Y) {
-
 var isArray = Y.Lang.isArray,
     toArray = Y.Array,
 
@@ -143,6 +141,29 @@ Y.Event = {
                 }
             }
         }
+    },
+
+    /**
+    Direct DOM event subscription, bypassing synthetic events or custom
+    overrides for a particular event.
+
+    Like `Y.on()`, the _target_ argument accepts a CSS selector string or a
+    DOM element, element collection or array, Node, or NodeList.
+
+    @method attach
+    @param {String} type Event name
+    @param {Function} callback Callback function to receive the event
+    @param {HTMLElement|HTMLElement[]|Node|NodeList|String} target Element or
+        elements hosting the event to subscribe to.
+    @param {Object} [thisObj] Override `this` in the callback. Defaults to the
+        subscribed target.
+    @param {Any} arg* Additional arguments to be passed to _callback_ after the
+        event facade.
+    @return {Subscription}
+    **/
+    attach: function () {
+        return DOMEvent
+                .subscribe(Y, toArray(arguments, 0, true), { phase: 'on' });
     },
 
     /**
@@ -497,7 +518,8 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
             for (i = 0, len = el.length; i < len; ++i) {
                 // args[0] is assigned the eventKey. Need to reset it.
                 args[0] = type;
-                subs.push(this.subscribe(el[i], args, Y.merge(details)));
+                subs.push(
+                    this.subscribe(el[i], args.slice(), Y.merge(details)));
             }
 
             // Return batch subscription
@@ -564,13 +586,15 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
 
     unsubscribe: function (target, args) {
         var type  = args[0],
-            isSub = (type.type && type.callback),
             el, eventKey, capture, phase, i, len, subs;
 
-        if (isSub) {
-            return FacadeEvent.unsubscribe.apply(this, arguments);
+        // use case: target.detach(sub);
+        if (type.type && type.callback) {
+            // Explicitly override target to Y. All DOM events are stored on Y.
+            return FacadeEvent.unsubscribe(Y, args);
         }
 
+        // use case: Y.detach(type, callback, target);
         if (target === Y) {
             args   = toArray(args, 0, true);
             target = args.splice(2, 1)[0];
@@ -681,5 +705,3 @@ for (name in events) {
         Y._yuievt.events[name] = events[name];
     }
 }
-
-}, '', { requires: [ 'eventx-base', 'selector' ] });

@@ -1,4 +1,3 @@
-YUI.add('eventx-synthetic', function (Y) {
 /**
 Backward compatibility shim for Y.Event.define.
 
@@ -116,5 +115,3 @@ Y.Event.define = function (type, config, force) {
             new Y.CustomEvent(config, Y.Event.SyntheticEvent);
     }
 };
-
-}, '', { requires: ['node-base'] });
