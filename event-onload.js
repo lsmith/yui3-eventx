@@ -41,9 +41,12 @@ Y.Event.DOM_EVENTS.load = new Y.CustomEvent({
 
             // Default window for `this`
             if (!args[2]) {
-                // Note: timing issue, if the node module is loaded after the
-                // subscription is made, the callback `this` won't be a Node
-                args[2] = Y.Node ? Y.one(win) : win;
+                // Context function to avoid timing issue: if the node module
+                // is loaded after the subscription is made, the callback
+                // `this` wouldn't be a Node
+                args[2] = function (e) {
+                    return Y.Node ? Y.one(win) : win;
+                };
             }
 
             return Y.Global.on.apply(Y.Global, args);
