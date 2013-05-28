@@ -56,11 +56,11 @@ increment.on('click', function (e) {
 });
 
 Y.one('#name').on('click', function (e) {
-    e.get('currentTarget').one('span')._node.innerHTML = this.get('tagName');
+    e.currentTarget.one('span')._node.innerHTML = this.get('tagName');
 });
 
 Y.one('#thisOverride').on('click', function (e) {
-    e.get('currentTarget').one('span')._node.innerHTML = this.tagName;
+    e.currentTarget.one('span')._node.innerHTML = this.tagName;
 }, { tagName: 'Fred' });
 
 Y.one('#args').on('click', function (e, name, bool) {
@@ -68,7 +68,7 @@ Y.one('#args').on('click', function (e, name, bool) {
 }, null, 'Fred', true);
 
 Y.one('#thisAndArgs').on('click', function (e, bool, lastName) {
-    e.get('currentTarget').one('span')._node.innerHTML = 
+    e.currentTarget.one('span')._node.innerHTML = 
         this.tagName + ' ' + lastName + (bool ? '!' : ' :(');
 }, { tagName: 'Angie' }, true, 'Good');
 

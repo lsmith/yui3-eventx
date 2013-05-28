@@ -30,13 +30,9 @@ var isArray = Y.Lang.isArray,
         63275: 35  // end
     },
 
-    FACADE_PROPS = ('relatedTarget container ' +
-                    'altKey ctrlKey metaKey shiftKey ' +
-                    'clientX clientY pageX pageY ' +
-                    'keyCode charCode which button wheelDelta').split(' '),
+    isSelectorMatch = Y.Selector.test,
 
     events, name, i, len;
-
 
 Y.Event = {
     /**
@@ -227,135 +223,36 @@ Y.Event = {
     }
 };
 
-function DOMEventFacade(type, target, payload) {
-    var key;
-
-    this.type   = type;
-    this.data   = {
-        type         : type,
-        target       : target
-    };
-    this._event = payload._event;
-
-    for (key in payload) {
-        if (payload.hasOwnProperty(key)) {
-            this.data[key] = payload[key];
-        }
-    }
-
-    // TODO: local override of getters for specific event types?
+function DOMEventFacade(config) {
+    this._event        = config.event;
+    this.currentTarget = config.currentTarget;
 }
 
-function getKeyCode() {
-    var e, code;
+Y.Event.EventFacade.prototype = {
+    /**
+    Has `e.preventDefault()` been called on this event?
 
-    // Because the same code is used for e.keyCode, e.charCode, and e.which
-    if (!this.data.keyCode) {
-        e    = this._event;
-        code = e.keyCode || e.charCode;
-
-        this.data.keyCode = webkitKeymap[code] || code;
-    }
-
-    return this.data.keyCode;
-}
-
-function getWhich() {
-    return this._event.which ||
-           this._event.charCode ||
-           this.get('keyCode'); // fall back to the getter for keyCode
-}
-
-function setElement(name, val) {
-    if (val) {
-        while (val.nodeType === 3) {
-            val = val.parentNode;
-        }
-    }
-
-    this.data[name] = val;
-}
-
-Y.Event.EventFacade = Y.extend(DOMEventFacade, Y.EventFacade, {
-    // Don't share the getters object from Y.EventFacade or event-node will
-    // add _getter.target for all events, custom and DOM.
-    // TODO: should this be Y.Object(EF.proto._getter)?
-    _getter: {
-        // charCode is unknown in keyup, keydown. keyCode is unknown in keypress.
-        // FF 3.6 - 8+? pass 0 for keyCode in keypress events.
-        // Webkit, FF 3.6-8+?, and IE9+? pass 0 for charCode in keydown, keyup.
-        // Webkit and IE9+? duplicate charCode in keyCode.
-        // Opera never sets charCode, always keyCode (though with the charCode).
-        // IE6-8 don't set charCode or which.
-        // All browsers other than IE6-8 set which=keyCode in keydown, keyup, and
-        // which=charCode in keypress.
-        //
-        // Moral of the story: (e.which || e.keyCode) will always return the
-        // known code for that key event phase. e.keyCode is often different in
-        // keypress from keydown and keyup.
-        keyCode : getKeyCode,
-        charCode: getKeyCode,
-        which   : getWhich,
-        button  : getWhich,
-        wheelDelta: function () {
-            var e;
-
-            if (!('wheelDelta' in this.data)
-            && (this.type === 'mousewheel' || this.type === 'DOMMouseScroll')) {
-                e = this._event;
-
-                this.data.wheelData = ((e.detail) ?
-                    (e.detail * -1) :
-                    Math.round(e.wheelDelta / 80)) ||
-                        ((e.wheelDelta < 0) ? -1 : 1);
-            }
-
-            return this.data.wheelDelta;
-        },
-        container: function () {
-            return this.data.container ||
-                   (this.subscription &&
-                    this.subscription.details &&
-                    this.subscription.details.container);
-        }
-    },
-
-    _setter: {
-        target       : setElement,
-        currentTarget: setElement,
-        relatedTarget: setElement,
-        container    : setElement
-    },
+    @property prevented
+    @type {Boolean}
+    @default `false`
+    **/
+    prevented: false,
 
     /**
-    Get a property from the event's data collection supplied at event creation.
-    Returns one of the following, in priority order:
-    1. value returned from a `_getter` defined for the property
-    1. value of the property in the event's data collection, if present
-    1. value of the property on the originating DOM event, if present
-    1. value of the property on the event object itself
+    Has `e.stopPropagation()` or `e.stopImmediatePropagation()` been called on
+    this event?
 
-    @method get
-    @param {String} name Data property name
-    @param {Boolean} noProp Do not fall back to retrieving a property on the
-                            instance if the getter is not set and the property
-                            wasn't found in the `data` collection.
-    @return {Any} whatever is stored in the data property
+    Value will be one of:
+    * 0 - unstopped (default)
+    * 1 - `e.stopPropagation()` called
+    * 2 - `e.stopImmediatePropagation()` called
+
+    @property prevented
+    @type {Number}
+    @default `0`
     **/
-    get: function (name, noProp) {
-        if (this._getter[name]) {
-            // I don't like the noProp hack. Is there a better way to prevent
-            // infinite loops?
-            return this._getter[name].call(this, name, noProp);
-        } else if (name in this.data) {
-            return this.data[name];
-        } else {
-            return (noProp || name in this._event) ?
-                this._event[name] :
-                this[name];
-        }
-    },
-
+    stopped  : 0,
+    
     /**
     Disables any default behavior of the event.
 
@@ -435,17 +332,164 @@ Y.Event.EventFacade = Y.extend(DOMEventFacade, Y.EventFacade, {
             .preventDefault();
 
         return this;
-    }
-});
+    },
 
-// Add getter/setter for common properties to allow e.shiftKey rather than
-// e.get('shiftKey'), even though the latter would be faster (probably).
-if (Object.defineProperties) { // definePropertIES to avoid IE8's bustedness
-    Y.Array.each(FACADE_PROPS, function (prop) {
-        Object.defineProperty(DOMEventFacade.prototype, prop, {
-            get: function () { return this.get(prop, true); },
-            set: function (val) { this.set(prop, val); }
+    /**
+    Detaches the subscription for this callback.
+
+    @method detach
+    @chainable
+    **/
+    detach: function () {
+        if (this.subscription && this.subscription.detach) {
+            this.subscription.detach();
+        }
+
+        return this;
+    }
+};
+
+// TODO: split the getter implementation off to a conditional module? Use a
+// conditional module for each implementation, getter or no-getter?
+function propertySetter(prop) {
+    return function (val) {
+        Object.defineProperty(this, prop, {
+            value       : val,
+            writable    : true,
+            configurable: true
         });
+    };
+}
+
+function lazyProp(prop) {
+    return {
+        // Not enumerable
+        configurable: true,
+        // getter reads from the native event, setter reconfigures property as
+        // a simple property with no getter/setter
+        get: function () {
+            return this._event[prop];
+        },
+        set: propertySetter(prop)
+    }
+}
+
+function getKeyCode(prop) {
+    return {
+        configurable: true,
+        get: function () {
+            var code = this._event.keyCode || this._event.charCode;
+
+            return webkitKeymap[code] || code;
+        },
+        set: propertySetter(prop)
+    };
+}
+
+function getWhich(prop) {
+    return {
+        configurable: true,
+        get: function () {
+            // fall back to the keyCode getter
+            return this._event.which || this._event.charCode || this.keyCode;
+        },
+        set: propertySetter(prop)
+    };
+}
+
+// definePropertIES to avoid IE8's bustedness
+if (Object.defineProperties) {
+    Object.defineProperties(DOMEventFacade.prototype, {
+        target: {
+            configurable: true,
+            get: function () {
+                // IE 9 moved to the standard event model and added
+                // defineProperties, so if the code got here, srcElement is dead
+                var el = this._event.target;
+
+                // lazy text node resolution
+                // TODO: is the while() loop necessary? I copied it from the
+                // current event source, but text nodes can't have children.
+                // So either it's unnecessary or it is addressing an
+                // undocumented browser bug.
+                while (el.nodeType === 3) {
+                    el = el.parentNode;
+                }
+
+                // TODO: it kinda sucks that e.target will incur overhead for
+                // each retrieval, but it's either that or reconfigure the
+                // property without a getter/setter on first fetch, which
+                // makes the first fetch slower. The choice is between
+                // preferring callbacks that fetch e.target once or multiple
+                // times. The overhead is minor in either case, but this is
+                // core code and will be executed a lot.
+                return el;
+            },
+            set: propertySetter('target')
+        },
+        type         : lazyProp('type'),
+        relatedTarget: lazyProp('relatedTarget'),
+        altKey       : lazyProp('altKey'),
+        ctrlKey      : lazyProp('ctrlKey'),
+        shiftKey     : lazyProp('shiftKey'),
+        metaKey      : lazyProp('metaKey'),
+        clientX      : lazyProp('clientX'),
+        clientY      : lazyProp('clientY'),
+        pageX        : lazyProp('pageX'),
+        pageY        : lazyProp('pageY'),
+
+        // charCode is unknown in keyup, keydown.
+        // keyCode is unknown in keypress.
+        // FF 3.6 - 8+? pass 0 for keyCode in keypress events.
+        // Webkit, FF 3.6-8+?, and IE9+? pass 0 for charCode in keydown, keyup.
+        // Webkit and IE9+? duplicate charCode in keyCode.
+        // Opera never sets charCode, always keyCode (though with the charCode).
+        // IE6-8 don't set charCode or which.
+        // All browsers other than IE6-8 set which=keyCode in keydown, keyup,
+        // and which=charCode in keypress.
+        //
+        // Moral of the story: (e.which || e.keyCode) will always return the
+        // known code for that key event phase. e.keyCode is often different in
+        // keypress from keydown and keyup.
+        keyCode : getKeyCode('keyCode'),
+        charCode: getKeyCode('charCode'),
+        which   : getWhich('which'),
+        button  : getWhich('button'),
+        wheelDelta: {
+            get: function () {
+                var detail, delta;
+
+                if (this.type === 'mousewheel' ||
+                    this.type === 'DOMMouseScroll') {
+                    detail = this._event.detail;
+                    delta  = this._event.wheelDelta;
+
+                    delta = -detail || Math.round(delta / 80) ||
+                                        ((delta < 0) ? -1 : 1);
+                }
+
+                // Reconfigure the property as a simple property with no getter
+                // or setter to avoid the calculation code above for multiple
+                // fetches of e.wheelDelta.
+                Object.defineProperty(this, 'wheelDelta', {
+                    value       : val,
+                    writable    : true,
+                    configurable: true
+                });
+
+                return delta;
+            },
+            set: propertySetter('wheelDelta')
+        },
+        container: {
+            configurable: true,
+            get: function () {
+                return this.subscription &&
+                       this.subscription.details &&
+                       this.subscription.details.container;
+            },
+            setter: propertySetter('container')
+        }
     });
 }
 
@@ -534,7 +578,7 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
     resolveTarget: Y.Event._resolveTarget,
 
     thisObjFn: function (e) {
-        return e.get('currentTarget');
+        return e.currentTarget;
     },
 
     delegate: function (target, args, details) {
@@ -550,20 +594,45 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
         // targets (not Nodes, which are EventTargets with getEvent). See
         // delegateNotify.
         args[2] = Y;
-
-        // Support selector filter
-        if (typeof details.filter === 'string') {
-            details.selector = details.filter;
-            details.filter   = this.selectorFilter;
-        }
     },
 
-    selectorFilter: function (e) {
-        var currentTarget = e.data.currentTarget,
-            container     = e.data.container,
-            root          = currentTarget === container ? null : container;
+    delegateNotify: function (e) {
+        var sub     = e && e.subscription,
+            details = sub && sub.details,
+            filter  = details && details.filter,
+            isSelectorFilter, target, event, path, container, match;
 
-        return Y.Selector.test(currentTarget, this.details.selector, root);
+        if (filter) {
+            isSelectorFilter = (typeof details.filter === 'string');
+            container = details.container;
+            target    = e._event.target || e._event.srcElement;
+
+            do {
+                if (isSelectorFilter) {
+                    match = isSelectorMatch(target, filter,
+                                (target === container ? null : container));
+                } else {
+                    e.currentTarget = Y.one ? Y.one(target) : target;
+
+                    match = filter.call(sub, e);
+                }
+
+                if (match) {
+                    // This duplicates Node creation for filter functions,
+                    // which is making something slow even slower, but filter
+                    // functions for DOM delegation are best rolled into on()
+                    // handler logic. Not that that shoud justify punishing
+                    // this code path's performance.
+                    e.currentTarget = Y.one ? Y.one(target) : target;
+
+                    // arguments contains e, which has had its currentTarget
+                    // updated.
+                    details.originalSub.notify(arguments);
+                }
+
+                target = target.parentNode;
+            } while (!e.stopped && target && target !== container);
+        }
     },
 
     registerSub: function (target, sub) {
@@ -636,7 +705,7 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
             return;
         }
 
-        e = new this.Event(type, (event.target || event.srcElement), {
+        e = new this.Event({
             _event       : event,
             currentTarget: currentTarget
         });
@@ -661,23 +730,7 @@ Y.Event.DOMEvent = DOMEvent = new Y.CustomEvent({
         }
     },
 
-    // Used for DOM event delegation
-    resolveBubblePath: function (el) {
-        while (el.nodeType === 3) {
-            el = el.parentNode;
-        }
-
-        var targets = [];
-
-        while (el) {
-            targets.push(el);
-            el = el.parentNode;
-        }
-
-        return targets;
-    },
-
-    Event       : DOMEventFacade,
+    Event: DOMEventFacade,
 
     _addDOMSub: function (el, type, capture) {
         YUI.Env.add(el, type, Y.Event._handleEvent, capture);

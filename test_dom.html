@@ -46,22 +46,22 @@ Y.on('click', function (e) {
 }, document.getElementById('increment'));
 
 Y.on('click', function (e) {
-    e.get('currentTarget').getElementsByTagName('span')[0].innerHTML =
+    e.currentTarget.getElementsByTagName('span')[0].innerHTML =
         this.tagName;
 }, '#name');
 
 Y.on('click', function (e) {
-    e.get('currentTarget').getElementsByTagName('span')[0].innerHTML =
+    e.currentTarget.getElementsByTagName('span')[0].innerHTML =
         this.tagName;
 }, '#thisOverride', { tagName: 'Fred' });
 
 Y.on('click', function (e, name, bool) {
-    e.get('currentTarget').getElementsByTagName('span')[0].innerHTML =
+    e.currentTarget.getElementsByTagName('span')[0].innerHTML =
         name + (bool ? '!' : ' :(');
 }, '#args', null, 'Fred', true);
 
 Y.on('click', function (e, bool, lastName) {
-    e.get('currentTarget').getElementsByTagName('span')[0].innerHTML =
+    e.currentTarget.getElementsByTagName('span')[0].innerHTML =
         this.tagName + ' ' + lastName + (bool ? '!' : ' :(');
 }, '#thisAndArgs', { tagName: 'Angie' }, true, 'Good');
 

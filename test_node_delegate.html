@@ -56,7 +56,7 @@ var subs = [
 
     /*
     Y.one('#buttons').delegate('click', function (e) {
-        var currentTarget = e.get('currentTarget'),
+        var currentTarget = e.currentTarget,
             name = currentTarget.getAttribute('data-name') ||
                    this.get('tagName');
 
@@ -65,7 +65,7 @@ var subs = [
     */
 
     Y.one('#buttons').delegate('click', function (e, bang, lastName) {
-        var currentTarget = e.get('currentTarget'),
+        var currentTarget = e.currentTarget,
             name = currentTarget.getAttribute('data-name') || this.tagName;
 
         currentTarget.one('span')._node.innerHTML = name + ' ' + lastName +

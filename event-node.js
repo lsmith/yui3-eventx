@@ -48,47 +48,72 @@ Y.Node.prototype.detachAll = Y.NodeList.prototype.detachAll = function () {
     }
 };
 
-function getNode(name) {
-    var node = this.data[name] || this._event[name];
-    
-    // Don't cache the Node instance in this.data because that makes for mixed
-    // types, which can cause headaches. The performance is worse by running
-    // Y.one() for every get(), but it can be mitigated by the calling code
-    // capturing the value.
-    return node && Y.one(node);
-}
+if (Object.defineProperties) {
+    Object.defineProperties(Y.Event.EventFacade.prototype, {
+        target: {
+            // Identical to core getter, except it returns a Node
+            get: function () {
+                var el = this._event.target;
 
-function setElement(name, val) {
-    if (val) {
-        if (val._node) {
-            val = val._node;
+                // Lazily resolve text node targets
+                while (el.nodeType === 3) {
+                    el = el.parentNode;
+                }
+
+                return Y.one(el);
+            }
+            // setter defined in event-dom, demotes to regular property
+        },
+        // Demoted on get because there are a few issues to balance:
+        // * IE8 and prior don't pass e.currentTarget, so it has to be passed
+        //   into the handling function from the subscription.
+        // * thisObjFn returns e.currentTarget for default callback `this`,
+        //   making the default behavior at least one call to Y.one(),
+        //   regardless of whether it will be used.
+        // * Since thisObjFn gets e.currentTarget once, multiple `this` refs
+        //   won't incur getter cost, but event a single e.currentTarget ref
+        //   in the callback would mean two getter hits.
+        // * configured `this` and never referencing e.currentTarget can avoid
+        //   creating a Node.
+        // Summary: The cost of reconfiguration quickly becomes less than getter
+        // overhead. It mostly impacts the default case where either `this` is
+        // defaulted but not used, or `this` is configured and e.currentTarget
+        // is referred to only once. This is slightly more than the non-eventx
+        // implementation is doing for currentTarget, but can at least avoid
+        // node creation in the case where `this` is configured and
+        // e.currentTarget is not referenced in the callback.
+        currentTarget: {
+            get: function () {
+                var val = Y.one(this._currentTarget);
+
+                Object.defineProperty(this, 'currentTarget', {
+                    value: val,
+                    configurable: true,
+                    writable: true
+                });
+
+                return val;
+            },
+            set: function (val) {
+                // TODO: may not be necessary
+                this._currentTarget = val;
+            }
+        },
+        relatedTarget: {
+            get: function () {
+                return Y.one(this._event.relatedTarget);
+            }
+        },
+        container    : {
+            get: function () {
+                var el = this.subscription &&
+                         this.subscription.details &&
+                         this.subscription.details.container;
+
+                return el && Y.one(el);
+            }
         }
-
-        while (val && val.nodeType === 3) {
-            val = val.parentNode;
-        }
-    }
-
-    this.data[name] = val;
+    });
 }
-
-Y.mix(Y.Event.EventFacade.prototype._getter, {
-    target       : getNode,
-    currentTarget: getNode,
-    relatedTarget: getNode,
-    container    : function () {
-        var details   = this.subscription && this.subscription.details,
-            container = this.data.container || (details && details.container);
-
-        return container && Y.one(container);
-    }
-}, true);
-
-Y.mix(Y.Event.EventFacade.prototype._setter, {
-    target       : setElement,
-    currentTarget: setElement,
-    relatedTarget: setElement,
-    container    : setElement
-}, true);
 
 }, '', { requires: [ 'eventx-dom', 'node-core' ] });

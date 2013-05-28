@@ -54,7 +54,7 @@ var subs = [
 
     /*
     Y.delegate('click', function (e) {
-        var currentTarget = e.get('currentTarget'),
+        var currentTarget = e.currentTarget,
             name = currentTarget.getAttribute('data-name') || this.tagName;
 
         currentTarget.getElementsByTagName('span')[0].innerHTML = name;
@@ -62,7 +62,7 @@ var subs = [
     */
 
     Y.delegate('click', function (e, bang, lastName) {
-        var currentTarget = e.get('currentTarget'),
+        var currentTarget = e.currentTarget,
             name = currentTarget.getAttribute('data-name') || this.tagName;
 
         currentTarget.getElementsByTagName('span')[0].innerHTML =

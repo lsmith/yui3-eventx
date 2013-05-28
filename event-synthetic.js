@@ -80,7 +80,7 @@ Y.Event.SyntheticEvent = new Y.CustomEvent({
     },
 
     thisObjFn: function (e) {
-        return (e && e.get && e.get('currentTarget')) ||
+        return (e && e.currentTarget) ||
                   nodeMap[this.details.nodeYuid]; // default to container?
     },
 
