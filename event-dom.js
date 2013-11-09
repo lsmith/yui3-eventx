@@ -224,7 +224,7 @@ Y.Event = {
 };
 
 function DOMEventFacade(config) {
-    this._event        = config.event;
+    this._event        = config._event;
     this.currentTarget = config.currentTarget;
 }
 
