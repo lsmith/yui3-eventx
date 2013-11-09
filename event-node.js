@@ -49,7 +49,7 @@ Y.Node.prototype.detachAll = Y.NodeList.prototype.detachAll = function () {
 };
 
 if (Object.defineProperties) {
-    Object.defineProperties(Y.Event.EventFacade.prototype, {
+    Object.defineProperties(Y.Event.DOMEvent.Event.prototype, {
         target: {
             // Identical to core getter, except it returns a Node
             get: function () {
