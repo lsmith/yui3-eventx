@@ -173,11 +173,12 @@ Y.extend(BatchSubscription, Subscription, {
 Event object passed as the first parameter to event subscription callbacks.
 
 Data to distinguish each instance is supplied in the _payload_ array. If the
-first argument is an object (recommended), its properties are mixed onto the
-instance.
+first argument is an object (recommended), it is used to seed the event's `data`
+property, which is what houses the data for the `get()` and `set()` methods.
 
-The full _payload_ array is also stored on the instance in the `details`
-property.
+All payload data in the passed array form is stored as the `details` property
+of the event's `data` collection. While it is recommended to use `get()` to
+access event data values, you can access the raw data at `e.data.details`.
 
 @class EventFacade
 @param {String} type The name of the event
@@ -185,27 +186,49 @@ property.
 @param {Any[]} [payload] Data specific to this event, passed
 **/
 function EventFacade(type, target, payload) {
-    var prop;
+    var data;
 
-    this.type   = type;
-    this.target = target;
+    this.type = type;
 
     if (payload) {
         this.details = payload;
 
         payload = payload[0];
 
-        if (payload && typeof payload === 'object') {
-            for (prop in payload) {
-                if (payload.hasOwnProperty(prop)) {
-                    this[prop] = payload[prop];
-                }
-            }
+        if (isObject(payload, true)) {
+            data = (payload instanceof EventFacade) ? payload.data : payload;
         }
     }
+
+    this.data = data || {};
+    this.data.target = target;
 }
 
 EventFacade.prototype = {
+    /**
+    Collection of getters to apply special logic to accessing certain data
+    properties. This is a shared object on the prototype, so be careful if you
+    modify it.
+
+    @property _getter
+    @type {Object}
+    @protected
+    **/
+    _getter: {
+        details: function () { return this.details; }
+    },
+
+    /**
+    Collection of setters to apply special logic to assigning certain data
+    properties. This is a shared object on the prototype, so be careful if you
+    modify it.
+
+    @property _setter
+    @type {Object}
+    @protected
+    **/
+    _setter: {},
+
     /**
     Has `e.preventDefault()` been called on this event?
 
@@ -306,8 +329,62 @@ EventFacade.prototype = {
         }
 
         return this;
+    },
+
+    /**
+    Get a property from the event's data collection supplied at event creation.
+    If a getter is defined for the property, its return value will be returned.
+    Otherwise, the property from the data collection, if present, will be
+    returned.
+
+    @method get
+    @param {String} name Data property name
+    @param {Boolean} noProp If no getter is defined, return only the value from
+                            the `data` collection. Do not fall back to
+                            retrieving property on the instance.
+    @return {Any} whatever is stored in the data property
+    **/
+    get: function (name, noProp) {
+        if (this._getter[name]) {
+            return this._getter[name].call(this, name);
+        } else {
+            return (noProp || name in this.data) ? this.data[name] : this[name];
+        }
+    },
+
+    /**
+    Set a property in the event's data collection. If a setter is defined for
+    the property, it will be called with the _name_ and _val_. Otherwise, the
+    property and value will be assigned to the data collection directly.
+
+    @method set
+    @param {String} name Data property name
+    @param {Any} val The value to assign
+    @chainable
+    **/
+    set: function (name, val) {
+        if (this._setter[name]) {
+            this._setter[name].call(this, name, val);
+        } else {
+            this.data[name] = val;
+        }
+
+        return this;
     }
 };
+
+if (Object.defineProperties) {
+    Object.defineProperties(EventFacade.prototype, {
+        target: {
+            get: function () { return this.get('target', true); },
+            set: function (val) { this.set('target', val); }
+        },
+        currentTarget: {
+            get: function () { return this.get('currentTarget', true); },
+            set: function (val) { this.set('currentTarget', val); }
+        }
+    });
+}
 
 
 /**
@@ -462,22 +539,22 @@ CustomEvent.prototype = {
         if (!abort) {
             if (this.on) {
                 abort = this.on(target, sub);
-
-                if (abort) {
-                    // Allow on() to return an alternate Subscription.
-                    // It is assumed that this subscription was registered
-                    // on the appropriate target.
-                    return abort.detach ? abort : null;
-                }
             }
 
-            // Register regular subscriptions, or immediately notify fireOnce
-            // subs that have already been fired.
-            if (fired) {
+            // Register the subscription
+            if (!abort && !fired) {
+                this.registerSub(target, sub);
+            } else if (abort.detach) {
+                // Allow on() to return an alternate Subscription.
+                // It is assumed that this subscription was registered on the
+                // appropriate target.
+                sub   = abort;
+                abort = false;
+            }
+
+            if (this.fireOnce && fired) {
                 sub.notify(fired);
                 abort = true;
-            } else {
-                this.registerSub(target, sub);
             }
         }
 
@@ -992,8 +1069,7 @@ CustomEvent.FacadeEvent = new CustomEvent({
         // Unfortunate cost, and assumption of behavior of this.Event to
         // subsume the object in payload[0] onto the facade :(
         if (payload) {
-            args = payload.slice(
-                    (payload[0] && typeof payload[0] === 'object') ? 1 : 0);
+            args = payload.slice(isObject(payload[0], true) ? 1 : 0);
             args.unshift(event);
         } else {
             args = [event];
@@ -1077,7 +1153,7 @@ CustomEvent.FacadeEvent = new CustomEvent({
                 // Snapshot subscriber list to avoid array changing during
                 // notifications (e.g. once() detaches)
                 subs = subs.slice();
-                event.currentTarget = target;
+                event.set('currentTarget', target);
 
                 for (j = 0, jlen = subs.length; j < jlen; ++j) {
                     sub = subs[j];
@@ -1118,15 +1194,27 @@ CustomEvent.FacadeEvent = new CustomEvent({
         var sub     = e && e.subscription,
             details = sub && sub.details,
             filter  = details && details.filter,
-            target, path, container, i, len;
+            target, event, path, container, i, len;
 
         if (filter) {
             container = details.container;
-            target    = e.target;
-            path      = target.getEvent(e.type).resolveBubblePath(e.target);
+            target    = e.get('target');
+            // Kind of a hacky fallback exploited for DOM event delegation.
+            // For custom event delegation and DOM event delegation when Node
+            // is loaded, the target will be the firing EventTarget (or Node),
+            // but for DOM delegation when Node isn't loaded (edge case city!),
+            // the target will be the raw DOM element, which obviously isn't
+            // an EventTarget. I should do an instanceof test, but a feature
+            // test seems acceptable unless in the future, native DOM element
+            // objects get a getEvent() method. Still, that use case is an edge
+            // case, so I'm willing to gamble.
+            event     = (target.getEvent ? target : this).getEvent(e.type);
+            path      = event.resolveBubblePath(e.data.target);
+
+            e.set('container', container);
 
             for (i = 0, len = path.length; i < len; ++i) {
-                e.currentTarget = path[i];
+                e.set('currentTarget', path[i]);
 
                 if (filter.call(sub, e)) {
                     // arguments contains e, which has had its currentTarget
@@ -1352,7 +1440,7 @@ Y.mix(EventTarget, {
         // Add the static publish method to the class
         Class.publish = function (type, config, inheritsFrom, smart) {
             // bind to the class for portability
-            return Y.EventTarget._publish(Class, Class.events,
+            return Y.EventTarget._publish(Class.events,
                         type, config, inheritsFrom, smart);
         };
 
@@ -1485,18 +1573,18 @@ Y.mix(EventTarget, {
     @static
     @protected
     **/
-    _publish: function (target, events, type, config, inheritsFrom, smart) {
+    _publish: function (events, type, config, inheritsFrom, smart) {
         var CustomEvent = Y.CustomEvent,
             event, i, name;
 
         if (isObject(type)) {
             // publish({ events }, inheritsFrom, smart) =>
-            // _publish(target, events, { configs }, inheritsFrom, smart),
-            // missing the fourth param for config, so inheritsFrom is captured
+            // _publish(events, { configs }, inheritsFrom, smart),
+            // missing the third param for config, so inheritsFrom is captured
             // in the config param and smart in inheritsFrom param
             for (event in type) {
                 if (type.hasOwnProperty(event)) {
-                    EventTarget._publish(target, events, event,
+                    EventTarget._publish(events, event,
                         type[event], config, inheritsFrom);
                 }
             }
@@ -1509,23 +1597,35 @@ Y.mix(EventTarget, {
 
             if (config && config instanceof CustomEvent) {
                 event = config;
-            } else { // Create a new event
-                if (!inheritsFrom) {
-                    // event is the first default to handle the use case of
-                    // publishing an instance version of an existing class event
-                    // or republishing an event. Because CustomEvent instances
-                    // can be reused to handle many event names, it's never
-                    // safe to modify the existing CustomEvent in place because
-                    // it could be modifying the behavior of multiple events.
-                    // So known events are treated as inheritance.
-                    inheritsFrom = event || events[DEFAULT];
-                }
-
+            } else if (events.hasOwnProperty(type)) {
                 // promoting a non-facade event to emit facade has to create a
                 // new event based off FacadeEvent. This is a bit of a hack
                 // because the event being replaced only has its own-properties
                 // mixed onto the FacadeEvent instance, but it might be 2+
                 // supers away. Unlikely, but possible.
+                if (config && config.emitFacade && !event.emitFacade) {
+                    event = new CustomEvent(event, CustomEvent.FacadeEvent);
+                }
+
+                if (config) {
+                    Y.mix(event, config, true);
+                }
+            } else { // Create a new event
+                // Convenience for publishing facade events, allowing
+                // Class.events = { foo: '_defFooFn', bar: '_defBarFn' }
+                if (typeof config === 'string') {
+                    config = { emitFacade: true, defaultFn: config };
+                }
+
+                if (!inheritsFrom) {
+                    // event is the first default to handle the use case of
+                    // publishing an instance version of an existing class event
+                    inheritsFrom = event || events[DEFAULT];
+                }
+
+                // non-facade event promoted to facade event. This is not a
+                // common use case, but the reverse condition is ugly. See
+                // above lengthy comment about how this is also a hack.
                 if (config && config.emitFacade && !inheritsFrom.emitFacade) {
                     event = Y.mix(
                         new CustomEvent(inheritsFrom, CustomEvent.FacadeEvent),
@@ -1533,10 +1633,6 @@ Y.mix(EventTarget, {
                 } else {
                     event = new CustomEvent(config, inheritsFrom);
                 }
-            }
-
-            if (event.publish) {
-                event.publish(target);
             }
 
             if (smart && isArray(smart)) {
@@ -1595,7 +1691,7 @@ EventTarget.prototype = {
     @chainable
     **/
     publish: function (type, config, inheritsFrom, smart) {
-        EventTarget._publish(this, this._yuievt.events,
+        EventTarget._publish(this._yuievt.events,
             type, config, inheritsFrom, smart);
 
         return this;
@@ -1847,7 +1943,7 @@ EventTarget.prototype = {
             i, len, subs;
 
         // Event isn't published explicitly. May be object subscription syntax
-        // or an event that is unspecial and handled by the default event or
+        // or an event that is unspacial and handled by the default event or
         // an event that will be handled by a registered smart event
         if (!event) {
             if (typeof type === STRING) {
@@ -2059,7 +2155,7 @@ EventTarget.prototype = {
     @return {Object} this instance
     @chainable
     **/
-    removeTarget: function (target) {
+    addTarget: function (target) {
         var path  = this._yuievt.bubblePath,
             index = path && arrayIndex(path, target);
 
@@ -2079,8 +2175,6 @@ Y.BatchSubscription = BatchSubscription;
 Y.CustomEvent = CustomEvent;
 Y.EventFacade = EventFacade;
 Y.EventTarget = EventTarget;
-// For back compat
-Y.Subscriber  = Y.EventHandle = Y.CustomEvent.Subscription;
 
 /**
 @for YUI
