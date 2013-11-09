@@ -462,22 +462,22 @@ CustomEvent.prototype = {
         if (!abort) {
             if (this.on) {
                 abort = this.on(target, sub);
+
+                if (abort) {
+                    // Allow on() to return an alternate Subscription.
+                    // It is assumed that this subscription was registered
+                    // on the appropriate target.
+                    return abort.detach ? abort : null;
+                }
             }
 
-            // Register the subscription
-            if (!abort && !fired) {
-                this.registerSub(target, sub);
-            } else if (abort.detach) {
-                // Allow on() to return an alternate Subscription.
-                // It is assumed that this subscription was registered on the
-                // appropriate target.
-                sub   = abort;
-                abort = false;
-            }
-
-            if (this.fireOnce && fired) {
+            // Register regular subscriptions, or immediately notify fireOnce
+            // subs that have already been fired.
+            if (fired) {
                 sub.notify(fired);
                 abort = true;
+            } else {
+                this.registerSub(target, sub);
             }
         }
 
@@ -2059,7 +2059,7 @@ EventTarget.prototype = {
     @return {Object} this instance
     @chainable
     **/
-    addTarget: function (target) {
+    removeTarget: function (target) {
         var path  = this._yuievt.bubblePath,
             index = path && arrayIndex(path, target);
 
